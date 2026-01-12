@@ -209,7 +209,7 @@ services:
 
   laravel:
     build:
-      context: ./services/laravel
+      context: ./apps/laravel
       dockerfile: ../../docker/laravel/Dockerfile.prod
     container_name: ${COMPOSE_PROJECT_NAME:-primary}_laravel
     restart: always
@@ -255,7 +255,7 @@ services:
 
   nestjs:
     build:
-      context: ./services/nestjs
+      context: ./apps/nestjs
       dockerfile: ../../docker/nestjs/Dockerfile.prod
     container_name: ${COMPOSE_PROJECT_NAME:-primary}_nestjs
     restart: always
@@ -303,7 +303,7 @@ services:
 
   react:
     build:
-      context: ./services/react
+      context: ./apps/react
       dockerfile: ../../docker/react/Dockerfile.prod
     container_name: ${COMPOSE_PROJECT_NAME:-primary}_react
     restart: always
@@ -333,7 +333,7 @@ services:
 
   next:
     build:
-      context: ./services/next
+      context: ./apps/next
       dockerfile: ../../docker/next/Dockerfile.prod
     container_name: ${COMPOSE_PROJECT_NAME:-primary}_next
     restart: always

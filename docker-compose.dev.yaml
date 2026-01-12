@@ -123,7 +123,7 @@ services:
 
   laravel:
     build:
-      context: ./services/laravel
+      context: ./apps/laravel
       dockerfile: ../../docker/laravel/Dockerfile.dev
     container_name: ${COMPOSE_PROJECT_NAME:-dev}_laravel
     restart: unless-stopped
@@ -136,7 +136,7 @@ services:
     ports:
       - '${LARAVEL_PORT:-8000}:8000'
     volumes:
-      - ./services/laravel:/var/www/html
+      - ./apps/laravel:/var/www/html
       - laravel_vendor:/var/www/html/vendor
       - laravel_storage:/var/www/html/storage
     networks:
@@ -155,7 +155,7 @@ services:
 
   nestjs:
     build:
-      context: ./services/nestjs
+      context: ./apps/nestjs
       dockerfile: ../../docker/nestjs/Dockerfile.dev
     container_name: ${COMPOSE_PROJECT_NAME:-dev}_nestjs
     restart: unless-stopped
@@ -168,7 +168,7 @@ services:
       - '${NESTJS_PORT:-3000}:3000'
       - '${NESTJS_DEBUG_PORT:-9229}:9229'
     volumes:
-      - ./services/nestjs:/app
+      - ./apps/nestjs:/app
       - nestjs_node_modules:/app/node_modules
     networks:
       - backend_network
@@ -192,7 +192,7 @@ services:
 
   react:
     build:
-      context: ./services/react
+      context: ./apps/react
       dockerfile: ../../docker/react/Dockerfile.dev
     container_name: ${COMPOSE_PROJECT_NAME:-dev}_react
     restart: unless-stopped
@@ -205,7 +205,7 @@ services:
     ports:
       - '${REACT_PORT:-3001}:3000'
     volumes:
-      - ./services/react:/app
+      - ./apps/react:/app
       - react_node_modules:/app/node_modules
     networks:
       - frontend_network
@@ -214,7 +214,7 @@ services:
 
   next:
     build:
-      context: ./services/next
+      context: ./apps/next
       dockerfile: ../../docker/next/Dockerfile.dev
     container_name: ${COMPOSE_PROJECT_NAME:-dev}_next
     restart: unless-stopped
@@ -226,7 +226,7 @@ services:
     ports:
       - '${NEXT_PORT:-3002}:3000'
     volumes:
-      - ./services/next:/app
+      - ./apps/next:/app
       - next_node_modules:/app/node_modules
       - next_cache:/app/.next
     networks:

@@ -64,12 +64,19 @@ A comprehensive, production-ready Infrastructure as Code (IaC) boilerplate suppo
 boilerplate_iac/
 ├── 📜 run.sh                    # Local development runner
 ├── 📜 deploy.sh                 # Production deployment script
-├── 📜 clone.sh                  # Clone new client environment
+├── 📜 clone.sh                  # Clone app repositories
 │
 ├── 🐳 docker-compose.dev.yaml   # Development environment
 ├── 🐳 docker-compose.prod.yaml  # Production environment
 ├── 🐳 docker-compose.primary.yaml   # Primary site (master DBs)
 ├── 🐳 docker-compose.secondary.yaml # Secondary site (replica DBs)
+│
+├── 📁 apps/                     # App source code (cloned via clone.sh)
+│   ├── README.md
+│   ├── laravel/                 # Laravel backend app
+│   ├── nestjs/                  # NestJS backend app
+│   ├── react/                   # React frontend app
+│   └── next/                    # Next.js frontend app
 │
 ├── 📁 env/                      # Environment configurations
 │   └── example/                 # Example client (template)
@@ -129,8 +136,8 @@ boilerplate_iac/
 git clone <repository-url>
 cd boilerplate_iac
 
-# 2. Create a new client environment
-./clone.sh -c my-client
+# 2. Clone app repositories (edit clone.sh first to set your repo URLs)
+./clone.sh
 
 # 3. Start development services
 ./run.sh -e dev
@@ -224,26 +231,42 @@ The `deploy.sh` script automatically:
 | `docker-compose.primary.yaml`   | Primary site with master databases    |
 | `docker-compose.secondary.yaml` | Secondary site with replica databases |
 
-## 👥 Client Management
+## 👥 App Management
 
-### Creating a New Client
+### Cloning App Repositories
 
 ```bash
-# Basic clone from example template
-./clone.sh -c acme-corp
+# Clone all apps (edit clone.sh first to set your repo URLs)
+./clone.sh
 
-# Clone from existing client
-./clone.sh -c new-client -t existing-client
+# Clone specific app only
+./clone.sh -a laravel
 
-# Clone with service repositories
-./clone.sh -c acme-corp --with-services
+# Clone from a specific branch
+./clone.sh -b develop
+
+# Clone specific app from specific branch
+./clone.sh -a nestjs -b feature/auth
 ```
 
-### Client Directory Structure
+### Apps Directory Structure
+
+```
+apps/
+├── README.md          # Apps directory marker
+├── laravel/           # Laravel backend app (cloned)
+├── nestjs/            # NestJS backend app (cloned)
+├── react/             # React frontend app (cloned)
+└── next/              # Next.js frontend app (cloned)
+```
+
+### Environment Configuration
+
+Copy example env files and customize for your deployment:
 
 ```
 env/
-└── acme-corp/
+└── example/
     ├── .env.back.laravel      # Laravel configuration
     ├── .env.back.nestjs       # NestJS configuration
     ├── .env.front.react       # React configuration
@@ -251,23 +274,8 @@ env/
     ├── .env.db.mongo          # MongoDB configuration
     ├── .env.db.mysql          # MySQL configuration
     ├── .env.db.postgres       # PostgreSQL configuration
-    ├── .env.db.redis          # Redis configuration
-    ├── docker-compose.override.yaml  # Client-specific overrides
-    └── README.md              # Client documentation
+    └── .env.db.redis          # Redis configuration
 ```
-
-### Placeholder Variables
-
-Environment templates use placeholders that are replaced during `clone.sh`:
-
-| Placeholder          | Description                 |
-| -------------------- | --------------------------- |
-| `{{CLIENT_NAME}}`    | Client identifier           |
-| `{{DB_PASSWORD}}`    | Generated database password |
-| `{{REDIS_PASSWORD}}` | Generated Redis password    |
-| `{{JWT_SECRET}}`     | Generated JWT secret        |
-| `{{APP_KEY}}`        | Generated application key   |
-| `{{TIMESTAMP}}`      | Creation timestamp          |
 
 ## ☸️ Kubernetes
 
@@ -399,16 +407,18 @@ Examples:
 Usage: ./clone.sh [options]
 
 Options:
-  -c, --client        New client name (required)
-  -t, --template      Template to clone from (default: example)
-  --with-services     Clone service repositories
-  -h, --help          Show help
+  -a, --app         Clone specific app (laravel|nestjs|react|next)
+  -b, --branch      Branch to clone (default: main)
+  -h, --help        Show help
 
 Examples:
-  ./clone.sh -c acme-corp                     # Clone from example
-  ./clone.sh -c new-client -t existing        # Clone from existing
-  ./clone.sh -c acme-corp --with-services     # Include service repos
+  ./clone.sh                        # Clone all apps
+  ./clone.sh -a laravel             # Clone only Laravel
+  ./clone.sh -b develop             # Clone from develop branch
+  ./clone.sh -a nestjs -b feat      # Clone NestJS from feat branch
 ```
+
+**Note:** Edit `APP_REPOS` in `clone.sh` to configure your repository URLs.
 
 ## 🔐 Security Notes
 

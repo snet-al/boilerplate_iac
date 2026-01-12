@@ -1,0 +1,24 @@
+# App repositories (cloned by clone.sh)
+apps/*
+!apps/README.md
+
+# Deployment artifacts
+.deploy/
+
+# Environment files with secrets
+env/*/.env.*
+!env/example/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/

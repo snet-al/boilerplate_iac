@@ -47,13 +47,18 @@ clone_app() {
     local app_dir="$APPS_DIR/$app"
 
     [[ -z "$repo_url" ]] && echo "Error: Unknown app: $app" && return 1
-    [[ -d "$app_dir" ]] && echo "Skipping $app (exists)" && return 0
 
-    echo "Cloning $app..."
-    git clone --branch "$BRANCH" "$repo_url" "$app_dir" 2>/dev/null || {
-        echo "Error: Failed to clone $app"
-        return 1
-    }
+    if [[ -d "$app_dir" ]]; then
+        echo "Updating $app..."
+        git -C "$app_dir" fetch
+        git -C "$app_dir" pull
+    else
+        echo "Cloning $app..."
+        git clone --branch "$BRANCH" "$repo_url" "$app_dir" 2>/dev/null || {
+            echo "Error: Failed to clone $app"
+            return 1
+        }
+    fi
 }
 
 while [[ $# -gt 0 ]]; do

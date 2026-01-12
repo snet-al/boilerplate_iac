@@ -1,6 +1,6 @@
 #!/bin/bash
 # =============================================================================
-# MYSQL DUMP EXECUTOR
+# POSTGRESQL DUMP EXECUTOR
 # =============================================================================
 # Simple executor script - receives all parameters from orchestrator
 # Supports both Docker container and host connections
@@ -58,20 +58,14 @@ if [[ "${CONNECTION_TYPE}" == "docker" ]]; then
     fi
     
     # Execute dump via docker exec
-    if docker exec "${CONTAINER}" \
-        mysqldump \
-        --user="${DB_USER}" \
-        --password="${DB_PASSWORD}" \
-        --single-transaction \
-        --routines \
-        --triggers \
-        --events \
-        --add-drop-database \
-        --add-drop-table \
-        --complete-insert \
-        --set-gtid-purged=OFF \
-        --databases "${DB_NAME}" \
-        2>/dev/null | gzip -6 > "${OUTPUT_FILE}"; then
+    if docker exec -e PGPASSWORD="${DB_PASSWORD}" "${CONTAINER}" \
+        pg_dump -U "${DB_USER}" -d "${DB_NAME}" \
+        --format=custom \
+        --no-owner \
+        --no-privileges \
+        --clean \
+        --if-exists \
+        > "${OUTPUT_FILE}" 2>/dev/null; then
         
         if [[ -s "${OUTPUT_FILE}" ]]; then
             size=$(du -h "${OUTPUT_FILE}" | cut -f1)
@@ -81,37 +75,34 @@ if [[ "${CONNECTION_TYPE}" == "docker" ]]; then
     fi
     
 else
-    # Host connection - use Docker image to run mysqldump
+    # Host connection - use Docker image to run pg_dump
     if [[ -z "${DB_HOST}" ]] || [[ -z "${DB_PORT}" ]]; then
         echo "ERROR: Missing required parameters: --host and --port"
         exit 1
     fi
     
     # Use provided image or default
-    DB_IMAGE="${DB_IMAGE:-mysql:8.0}"
+    DB_IMAGE="${DB_IMAGE:-postgres:16}"
     DB_NETWORK="${DB_NETWORK:-host}"
     
     # Build network flag
     NETWORK_FLAG=""
     [[ -n "${DB_NETWORK}" ]] && NETWORK_FLAG="--network ${DB_NETWORK}"
     
-    # Execute dump via Docker image (no need to install mysqldump on host)
-    if docker run --rm ${NETWORK_FLAG} "${DB_IMAGE}" \
-        mysqldump \
-        --host="${DB_HOST}" \
-        --port="${DB_PORT}" \
-        --user="${DB_USER}" \
-        --password="${DB_PASSWORD}" \
-        --single-transaction \
-        --routines \
-        --triggers \
-        --events \
-        --add-drop-database \
-        --add-drop-table \
-        --complete-insert \
-        --set-gtid-purged=OFF \
-        --databases "${DB_NAME}" \
-        2>/dev/null | gzip -6 > "${OUTPUT_FILE}"; then
+    # Execute dump via Docker image (no need to install pg_dump on host)
+    if docker run --rm ${NETWORK_FLAG} -e PGPASSWORD="${DB_PASSWORD}" "${DB_IMAGE}" \
+        pg_dump \
+        -h "${DB_HOST}" \
+        -p "${DB_PORT}" \
+        -U "${DB_USER}" \
+        -d "${DB_NAME}" \
+        --format=custom \
+        --no-owner \
+        --no-privileges \
+        --disable-triggers \
+        --clean \
+        --if-exists \
+        > "${OUTPUT_FILE}" 2>/dev/null; then
         
         if [[ -s "${OUTPUT_FILE}" ]]; then
             size=$(du -h "${OUTPUT_FILE}" | cut -f1)

@@ -2,27 +2,38 @@
 
 All backup operations are managed through the central orchestrator `backup.sh`.
 
+## Setup
+
+First, create your backup configuration:
+
+```bash
+# Copy example config
+cp env/backup.env.example backup.env
+cp env/backup.prod.env.example backup.prod.env
+
+# Edit the config to set which database to backup
+# Set BACKUP_DATABASE to: postgres, mysql, or mongo
+# Configure connection details: CONTAINER, DB_USER, DB_PASSWORD, DB_NAME
+```
+
 ## Quick Start
 
 ```bash
-# Dump all databases
+# Dump configured database (dev)
 ./backup.sh dump
 
-# Dump specific database type
-./backup.sh dump -d postgres
-./backup.sh dump -d mysql
-./backup.sh dump -d mongo
-
-# Dump in production
+# Dump configured database (production)
 ./backup.sh dump -e prod
 
-# Restore from backup
-./backup.sh restore -d postgres -f postgres_app_db_20240115_120000.dump
-./backup.sh restore -d mysql -f mysql_app_db_20240115_120000.sql.gz --drop
+# Override database name
+./backup.sh dump -n custom_db
 
-# List backups
+# Restore from backup
+./backup.sh restore -f postgres_app_db_20240115_120000.dump
+./backup.sh restore -f mysql_app_db_20240115_120000.sql.gz --drop
+
+# List all backups
 ./backup.sh list
-./backup.sh list -d postgres
 
 # Cleanup old backups
 ./backup.sh cleanup -r 14
@@ -39,29 +50,27 @@ All backup operations are managed through the central orchestrator `backup.sh`.
 
 ## Options
 
-| Option            | Description                                                |
-| ----------------- | ---------------------------------------------------------- |
-| `-e, --env`       | Environment (dev\|prod) - default: dev                     |
-| `-d, --database`  | Database type (postgres\|mysql\|mongo\|all) - default: all |
-| `-n, --name`      | Specific database name (overrides env default)             |
-| `-f, --file`      | Backup file for restore                                    |
-| `-r, --retention` | Days to keep backups - default: 7                          |
-| `--drop`          | Drop existing database before restore                      |
-| `--dry-run`       | Preview without executing                                  |
+| Option            | Description                                        |
+| ----------------- | -------------------------------------------------- |
+| `-e, --env`       | Environment (dev\|prod) - default: dev             |
+| `-n, --name`      | Override database name from config                 |
+| `-f, --file`      | Backup file for restore                            |
+| `-r, --retention` | Days to keep backups (overrides config)            |
+| `--drop`          | Drop existing database before restore              |
+| `--dry-run`       | Preview without executing                          |
 
 ## Architecture
 
 ```
 backup.sh (Orchestrator)
-├── Holds all project configuration
-├── Loads environment variables
-├── Knows container names
-├── Manages credentials
-└── Calls executor scripts with parameters
+├── Loads configuration from backup.env or backup.prod.env
+├── Determines which database to backup (BACKUP_DATABASE setting)
+├── Uses generic variables (CONTAINER, DB_USER, DB_PASSWORD, DB_NAME)
+└── Calls appropriate executor script with parameters
 
 scripts/backup/
-├── dump_postgress.sh    # Simple executor - just runs pg_dump
-├── restore_postgress.sh # Simple executor - just runs pg_restore
+├── dump_postgres.sh     # Simple executor - just runs pg_dump
+├── restore_postgres.sh  # Simple executor - just runs pg_restore
 ├── dump_mysql.sh        # Simple executor - just runs mysqldump
 ├── restore_mysql.sh     # Simple executor - just runs mysql restore
 ├── dump_mongo.sh        # Simple executor - just runs mongodump
@@ -69,6 +78,25 @@ scripts/backup/
 ```
 
 The executor scripts are "dumb" - they receive all parameters from the orchestrator and just execute the backup/restore commands.
+
+## Configuration
+
+Edit `backup.env` or `backup.prod.env`:
+
+```bash
+# Which database to backup (postgres|mysql|mongo)
+BACKUP_DATABASE="postgres"
+
+# Database connection details
+CONTAINER="dev_postgres"
+DB_USER="app_user"
+DB_PASSWORD="devpassword"
+DB_NAME="app_db"
+
+# Backup settings
+BACKUP_RETENTION_DAYS=7
+BACKUP_DIR="./backups/data"
+```
 
 ## Backup Locations
 
@@ -82,20 +110,20 @@ backups/data/
 ## Examples
 
 ```bash
-# Dump PostgreSQL in dev
-./backup.sh dump -d postgres
+# Dump configured database in dev
+./backup.sh dump
 
-# Dump MySQL with custom database name
-./backup.sh dump -d mysql -n custom_db
+# Dump configured database with custom name
+./backup.sh dump -n custom_db
 
-# Dump all databases in production
+# Dump configured database in production
 ./backup.sh dump -e prod
 
 # Preview restore (dry run)
-./backup.sh restore -d postgres -f backup.dump --dry-run
+./backup.sh restore -f backup.dump --dry-run
 
 # Restore with drop existing
-./backup.sh restore -d mysql -f backup.sql.gz --drop
+./backup.sh restore -f backup.sql.gz --drop
 
 # Cleanup backups older than 30 days
 ./backup.sh cleanup -r 30

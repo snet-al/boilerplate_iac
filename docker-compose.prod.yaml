@@ -178,8 +178,6 @@ services:
       dockerfile: ../../docker/laravel/Dockerfile.prod
     container_name: ${COMPOSE_PROJECT_NAME:-prod}_laravel
     restart: always
-    env_file:
-      - ${ENV_DIR:-.}/.env.laravel
     environment:
       APP_ENV: production
       APP_DEBUG: 'false'
@@ -220,8 +218,6 @@ services:
       dockerfile: ../../docker/nestjs/Dockerfile.prod
     container_name: ${COMPOSE_PROJECT_NAME:-prod}_nestjs
     restart: always
-    env_file:
-      - ${ENV_DIR:-.}/.env.nestjs
     environment:
       NODE_ENV: production
     networks:
@@ -264,8 +260,6 @@ services:
       dockerfile: ../../docker/react/Dockerfile.prod
     container_name: ${COMPOSE_PROJECT_NAME:-prod}_react
     restart: always
-    env_file:
-      - ${ENV_DIR:-.}/.env.react
     networks:
       - frontend_network
     deploy:
@@ -293,8 +287,6 @@ services:
       dockerfile: ../../docker/next/Dockerfile.prod
     container_name: ${COMPOSE_PROJECT_NAME:-prod}_next
     restart: always
-    env_file:
-      - ${ENV_DIR:-.}/.env.next
     networks:
       - frontend_network
     depends_on:

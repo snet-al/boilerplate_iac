@@ -1,0 +1,198 @@
+# =============================================================================
+# KUBERNETES SERVICES
+# =============================================================================
+
+# Backend Services
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: laravel
+  namespace: app
+  labels:
+    app: laravel
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  selector:
+    app: laravel
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nestjs
+  namespace: app
+  labels:
+    app: nestjs
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+      name: http
+  selector:
+    app: nestjs
+
+# Frontend Services
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: react
+  namespace: app
+  labels:
+    app: react
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+      name: http
+  selector:
+    app: react
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: next
+  namespace: app
+  labels:
+    app: next
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3000
+      targetPort: 3000
+      protocol: TCP
+      name: http
+  selector:
+    app: next
+
+# Database Services
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-primary
+  namespace: app
+  labels:
+    app: mysql
+    role: primary
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3306
+      targetPort: 3306
+      protocol: TCP
+      name: mysql
+  selector:
+    app: mysql
+    role: primary
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-primary
+  namespace: app
+  labels:
+    app: postgres
+    role: primary
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+      protocol: TCP
+      name: postgres
+  selector:
+    app: postgres
+    role: primary
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo-primary
+  namespace: app
+  labels:
+    app: mongo
+    role: primary
+spec:
+  type: ClusterIP
+  ports:
+    - port: 27017
+      targetPort: 27017
+      protocol: TCP
+      name: mongo
+  selector:
+    app: mongo
+    role: primary
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: app
+  labels:
+    app: redis
+spec:
+  type: ClusterIP
+  ports:
+    - port: 6379
+      targetPort: 6379
+      protocol: TCP
+      name: redis
+  selector:
+    app: redis
+
+# Headless Services for StatefulSets (DNS discovery)
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-primary-headless
+  namespace: app
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - port: 3306
+      name: mysql
+  selector:
+    app: mysql
+    role: primary
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-primary-headless
+  namespace: app
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - port: 5432
+      name: postgres
+  selector:
+    app: postgres
+    role: primary
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo-primary-headless
+  namespace: app
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+    - port: 27017
+      name: mongo
+  selector:
+    app: mongo
+    role: primary

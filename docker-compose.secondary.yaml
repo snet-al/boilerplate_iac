@@ -1,0 +1,479 @@
+# =============================================================================
+# DOCKER COMPOSE - SECONDARY SITE (SLAVE/REPLICA)
+# =============================================================================
+# Secondary site with read replicas of databases (no master DBs)
+# Configured in master-slave architecture for failover/load distribution
+# Usage: docker-compose -f docker-compose.secondary.yaml up -d
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # ===========================================================================
+  # DATABASES - REPLICA/SLAVE CONFIGURATION
+  # ===========================================================================
+
+  mongo-secondary:
+    image: mongo:7
+    container_name: ${COMPOSE_PROJECT_NAME:-secondary}_mongo
+    restart: always
+    env_file:
+      - ${ENV_DIR:-.}/.env.mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+    command: >
+      mongod
+      --replSet rs0
+      --bind_ip_all
+      --keyFile /etc/mongo/replica.key
+    volumes:
+      - mongo_secondary_data:/data/db
+      - mongo_secondary_config:/data/configdb
+      - ./docker/mongo/replica.key:/etc/mongo/replica.key:ro
+    networks:
+      - backend_network
+      - replication_network
+    ports:
+      - '27017:27017'
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '200m'
+        max-file: '10'
+
+  redis-secondary:
+    image: redis:7-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-secondary}_redis
+    restart: always
+    env_file:
+      - ${ENV_DIR:-.}/.env.redis
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --replicaof ${REDIS_PRIMARY_HOST} 6379
+      --masterauth ${REDIS_PRIMARY_PASSWORD}
+      --replica-read-only yes
+    volumes:
+      - redis_secondary_data:/data
+    networks:
+      - backend_network
+      - replication_network
+    ports:
+      - '6379:6379'
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', 'ping']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '100m'
+        max-file: '5'
+
+  mysql-secondary:
+    image: mysql:8
+    container_name: ${COMPOSE_PROJECT_NAME:-secondary}_mysql
+    restart: always
+    env_file:
+      - ${ENV_DIR:-.}/.env.mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-app_db}
+    command: >
+      --server-id=2
+      --log-bin=mysql-bin
+      --binlog-format=ROW
+      --gtid-mode=ON
+      --enforce-gtid-consistency=ON
+      --log-slave-updates=ON
+      --read-only=ON
+      --super-read-only=ON
+      --relay-log=relay-bin
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --innodb-buffer-pool-size=1G
+      --max-connections=500
+    volumes:
+      - mysql_secondary_data:/var/lib/mysql
+      - ./docker/mysql/conf.d/secondary.cnf:/etc/mysql/conf.d/replication.cnf:ro
+      - ./docker/mysql/secondary-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - backend_network
+      - replication_network
+    ports:
+      - '3306:3306'
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '200m'
+        max-file: '10'
+
+  postgres-secondary:
+    image: postgres:16-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-secondary}_postgres
+    restart: always
+    env_file:
+      - ${ENV_DIR:-.}/.env.postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-app_db}
+      POSTGRES_USER: ${POSTGRES_USER:-app_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data
+    command: >
+      postgres
+      -c hot_standby=on
+      -c shared_buffers=512MB
+      -c effective_cache_size=1536MB
+      -c work_mem=16MB
+      -c max_connections=300
+    volumes:
+      - postgres_secondary_data:/var/lib/postgresql/data
+      - ./docker/postgres/secondary/recovery.conf:/var/lib/postgresql/data/recovery.conf:ro
+      - ./docker/postgres/secondary/standby.signal:/var/lib/postgresql/data/standby.signal:ro
+    networks:
+      - backend_network
+      - replication_network
+    ports:
+      - '5432:5432'
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-app_user}']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '200m'
+        max-file: '10'
+
+  # ===========================================================================
+  # BACKENDS - READ-ONLY MODE (Connected to Replica DBs)
+  # ===========================================================================
+
+  laravel:
+    build:
+      context: ./services/laravel
+      dockerfile: ../../docker/laravel/Dockerfile.prod
+    container_name: ${COMPOSE_PROJECT_NAME:-secondary}_laravel
+    restart: always
+    env_file:
+      - ${ENV_DIR:-.}/.env.laravel
+    environment:
+      APP_ENV: production
+      APP_DEBUG: 'false'
+      LOG_LEVEL: warning
+      # Read from local replica
+      DB_READ_HOST: mysql-secondary
+      # Write to primary (if needed, falls back to primary)
+      DB_WRITE_HOST: ${MYSQL_PRIMARY_HOST:-mysql-secondary}
+      REDIS_HOST: redis-secondary
+      # Enable read-only mode flag for application logic
+      APP_READ_ONLY: '${APP_READ_ONLY:-false}'
+    volumes:
+      - laravel_storage:/var/www/html/storage
+    networks:
+      - backend_network
+      - frontend_network
+    depends_on:
+      mysql-secondary:
+        condition: service_healthy
+      redis-secondary:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8000/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '100m'
+        max-file: '5'
+
+  nestjs:
+    build:
+      context: ./services/nestjs
+      dockerfile: ../../docker/nestjs/Dockerfile.prod
+    container_name: ${COMPOSE_PROJECT_NAME:-secondary}_nestjs
+    restart: always
+    env_file:
+      - ${ENV_DIR:-.}/.env.nestjs
+    environment:
+      NODE_ENV: production
+      # Read from local replica
+      DATABASE_READ_HOST: postgres-secondary
+      # Write to primary (if needed)
+      DATABASE_WRITE_HOST: ${POSTGRES_PRIMARY_HOST:-postgres-secondary}
+      REDIS_HOST: redis-secondary
+      MONGO_HOST: mongo-secondary
+      # Read-only mode
+      READ_ONLY_MODE: '${READ_ONLY_MODE:-false}'
+    networks:
+      - backend_network
+      - frontend_network
+    depends_on:
+      postgres-secondary:
+        condition: service_healthy
+      redis-secondary:
+        condition: service_healthy
+      mongo-secondary:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3000/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '100m'
+        max-file: '5'
+
+  # ===========================================================================
+  # FRONTENDS
+  # ===========================================================================
+
+  react:
+    build:
+      context: ./services/react
+      dockerfile: ../../docker/react/Dockerfile.prod
+    container_name: ${COMPOSE_PROJECT_NAME:-secondary}_react
+    restart: always
+    env_file:
+      - ${ENV_DIR:-.}/.env.react
+    networks:
+      - frontend_network
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:80']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '50m'
+        max-file: '3'
+
+  next:
+    build:
+      context: ./services/next
+      dockerfile: ../../docker/next/Dockerfile.prod
+    container_name: ${COMPOSE_PROJECT_NAME:-secondary}_next
+    restart: always
+    env_file:
+      - ${ENV_DIR:-.}/.env.next
+    networks:
+      - frontend_network
+    depends_on:
+      - nestjs
+      - laravel
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3000']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '50m'
+        max-file: '3'
+
+  # ===========================================================================
+  # INFRASTRUCTURE
+  # ===========================================================================
+
+  nginx:
+    image: nginx:alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-secondary}_nginx
+    restart: always
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./config/nginx/prod:/etc/nginx/conf.d:ro
+      - ./config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./config/nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_cache:/var/cache/nginx
+    networks:
+      - frontend_network
+      - backend_network
+    depends_on:
+      - laravel
+      - nestjs
+      - react
+      - next
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    healthcheck:
+      test: ['CMD', 'nginx', '-t']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '100m'
+        max-file: '5'
+
+  # ===========================================================================
+  # REPLICATION MONITORING
+  # ===========================================================================
+
+  replication-monitor:
+    image: alpine:latest
+    container_name: ${COMPOSE_PROJECT_NAME:-secondary}_replication_monitor
+    restart: always
+    command: >
+      sh -c "
+        apk add --no-cache curl mysql-client postgresql-client redis
+        while true; do
+          echo '=== Replication Status Check ==='
+          echo 'MySQL Slave Status:'
+          mysql -h mysql-secondary -u root -p${MYSQL_ROOT_PASSWORD} -e 'SHOW SLAVE STATUS\G' 2>/dev/null || echo 'MySQL check failed'
+          echo 'PostgreSQL Recovery Status:'
+          PGPASSWORD=${POSTGRES_PASSWORD} psql -h postgres-secondary -U ${POSTGRES_USER} -d ${POSTGRES_DB} -c 'SELECT pg_is_in_recovery();' 2>/dev/null || echo 'PostgreSQL check failed'
+          echo 'Redis Replication Info:'
+          redis-cli -h redis-secondary -a ${REDIS_PASSWORD} INFO replication 2>/dev/null | grep -E 'role|master_link_status' || echo 'Redis check failed'
+          sleep 60
+        done
+      "
+    networks:
+      - backend_network
+    depends_on:
+      - mysql-secondary
+      - postgres-secondary
+      - redis-secondary
+    deploy:
+      resources:
+        limits:
+          cpus: '0.1'
+          memory: 64M
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+volumes:
+  mongo_secondary_data:
+    driver: local
+  mongo_secondary_config:
+    driver: local
+  redis_secondary_data:
+    driver: local
+  mysql_secondary_data:
+    driver: local
+  postgres_secondary_data:
+    driver: local
+  laravel_storage:
+    driver: local
+  nginx_cache:
+    driver: local
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+  backend_network:
+    driver: bridge
+  frontend_network:
+    driver: bridge
+  replication_network:
+    driver: bridge
+    # For cross-host replication, configure external network
+    # external: true
+    # name: primary_replication_network

@@ -1,0 +1,97 @@
+# =============================================================================
+# LARAVEL PRODUCTION DOCKERFILE (Multi-stage)
+# =============================================================================
+
+# Stage 1: Composer dependencies
+FROM composer:latest AS composer
+WORKDIR /app
+COPY composer.json composer.lock ./
+RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
+
+COPY . .
+RUN composer dump-autoload --optimize --classmap-authoritative
+
+# Stage 2: Frontend assets
+FROM node:20-alpine AS frontend
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --production=false
+COPY . .
+RUN npm run build
+
+# Stage 3: Production image
+FROM php:8.3-fpm-alpine
+
+# Install production dependencies only
+RUN apk add --no-cache \
+    libpng \
+    libjpeg-turbo \
+    freetype \
+    libzip \
+    oniguruma \
+    postgresql-libs \
+    nginx \
+    supervisor
+
+# Install PHP extensions
+RUN apk add --no-cache --virtual .build-deps \
+        libpng-dev \
+        libjpeg-turbo-dev \
+        freetype-dev \
+        libzip-dev \
+        oniguruma-dev \
+        postgresql-dev \
+        $PHPIZE_DEPS \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
+    && docker-php-ext-install -j$(nproc) \
+        pdo \
+        pdo_mysql \
+        pdo_pgsql \
+        mbstring \
+        exif \
+        pcntl \
+        bcmath \
+        gd \
+        zip \
+        opcache \
+    && pecl install redis \
+    && docker-php-ext-enable redis \
+    && apk del .build-deps
+
+# Set working directory
+WORKDIR /var/www/html
+
+# Copy application files
+COPY --from=composer /app/vendor ./vendor
+COPY --from=frontend /app/public/build ./public/build
+COPY . .
+
+# Create storage directories and set permissions
+RUN mkdir -p storage/framework/{sessions,views,cache} \
+    && mkdir -p storage/logs \
+    && mkdir -p bootstrap/cache \
+    && chown -R www-data:www-data storage bootstrap/cache
+
+# PHP production configuration
+RUN mv "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
+COPY docker/laravel/php.prod.ini /usr/local/etc/php/conf.d/custom.ini
+COPY docker/laravel/opcache.ini /usr/local/etc/php/conf.d/opcache.ini
+
+# Nginx configuration
+COPY docker/laravel/nginx.conf /etc/nginx/http.d/default.conf
+
+# Supervisor configuration
+COPY docker/laravel/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Production entrypoint
+COPY docker/laravel/entrypoint.prod.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+EXPOSE 8000
+
+ENTRYPOINT ["entrypoint.sh"]
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

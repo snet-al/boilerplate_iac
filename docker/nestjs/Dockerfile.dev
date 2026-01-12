@@ -1,0 +1,40 @@
+# =============================================================================
+# NESTJS DEVELOPMENT DOCKERFILE
+# =============================================================================
+FROM node:20-alpine
+
+# Install system dependencies
+RUN apk add --no-cache \
+    curl \
+    git \
+    python3 \
+    make \
+    g++
+
+# Set working directory
+WORKDIR /app
+
+# Install global packages
+RUN npm install -g @nestjs/cli typescript ts-node
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy application files
+COPY . .
+
+# Create non-root user
+RUN addgroup -g 1000 -S nodejs && \
+    adduser -u 1000 -S nodejs -G nodejs && \
+    chown -R nodejs:nodejs /app
+
+USER nodejs
+
+# Expose ports (app + debug)
+EXPOSE 3000 9229
+
+# Development command with hot reload
+CMD ["npm", "run", "start:dev"]

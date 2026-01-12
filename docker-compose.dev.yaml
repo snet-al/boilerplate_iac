@@ -1,0 +1,340 @@
+# =============================================================================
+# DOCKER COMPOSE - DEVELOPMENT ENVIRONMENT
+# =============================================================================
+# All services with development configurations, hot-reload, debug modes
+# Usage: docker-compose -f docker-compose.dev.yaml up
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # ===========================================================================
+  # DATABASES
+  # ===========================================================================
+
+  mongo:
+    image: mongo:7
+    container_name: ${COMPOSE_PROJECT_NAME:-dev}_mongo
+    restart: unless-stopped
+    env_file:
+      - ${ENV_DIR:-.}/.env.mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-devpassword}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-app_db}
+    ports:
+      - '${MONGO_PORT:-27017}:27017'
+    volumes:
+      - mongo_data:/data/db
+      - mongo_config:/data/configdb
+      - ./docker/mongo/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - backend_network
+    healthcheck:
+      test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-dev}_redis
+    restart: unless-stopped
+    env_file:
+      - ${ENV_DIR:-.}/.env.redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-devpassword}
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend_network
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD:-devpassword}', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mysql:
+    image: mysql:8
+    container_name: ${COMPOSE_PROJECT_NAME:-dev}_mysql
+    restart: unless-stopped
+    env_file:
+      - ${ENV_DIR:-.}/.env.mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-devpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-app_db}
+      MYSQL_USER: ${MYSQL_USER:-app_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-devpassword}
+    ports:
+      - '${MYSQL_PORT:-3306}:3306'
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+      - ./docker/mysql/conf.d:/etc/mysql/conf.d:ro
+    networks:
+      - backend_network
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'mysqladmin',
+          'ping',
+          '-h',
+          'localhost',
+          '-u',
+          'root',
+          '-p${MYSQL_ROOT_PASSWORD:-devpassword}',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-dev}_postgres
+    restart: unless-stopped
+    env_file:
+      - ${ENV_DIR:-.}/.env.postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-app_db}
+      POSTGRES_USER: ${POSTGRES_USER:-app_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - backend_network
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'pg_isready -U ${POSTGRES_USER:-app_user} -d ${POSTGRES_DB:-app_db}',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================================================
+  # BACKENDS
+  # ===========================================================================
+
+  laravel:
+    build:
+      context: ./services/laravel
+      dockerfile: ../../docker/laravel/Dockerfile.dev
+    container_name: ${COMPOSE_PROJECT_NAME:-dev}_laravel
+    restart: unless-stopped
+    env_file:
+      - ${ENV_DIR:-.}/.env.laravel
+    environment:
+      APP_ENV: local
+      APP_DEBUG: 'true'
+      LOG_LEVEL: debug
+    ports:
+      - '${LARAVEL_PORT:-8000}:8000'
+    volumes:
+      - ./services/laravel:/var/www/html
+      - laravel_vendor:/var/www/html/vendor
+      - laravel_storage:/var/www/html/storage
+    networks:
+      - backend_network
+      - frontend_network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8000/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  nestjs:
+    build:
+      context: ./services/nestjs
+      dockerfile: ../../docker/nestjs/Dockerfile.dev
+    container_name: ${COMPOSE_PROJECT_NAME:-dev}_nestjs
+    restart: unless-stopped
+    env_file:
+      - ${ENV_DIR:-.}/.env.nestjs
+    environment:
+      NODE_ENV: development
+      DEBUG: 'nestjs:*'
+    ports:
+      - '${NESTJS_PORT:-3000}:3000'
+      - '${NESTJS_DEBUG_PORT:-9229}:9229'
+    volumes:
+      - ./services/nestjs:/app
+      - nestjs_node_modules:/app/node_modules
+    networks:
+      - backend_network
+      - frontend_network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3000/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===========================================================================
+  # FRONTENDS
+  # ===========================================================================
+
+  react:
+    build:
+      context: ./services/react
+      dockerfile: ../../docker/react/Dockerfile.dev
+    container_name: ${COMPOSE_PROJECT_NAME:-dev}_react
+    restart: unless-stopped
+    env_file:
+      - ${ENV_DIR:-.}/.env.react
+    environment:
+      NODE_ENV: development
+      CHOKIDAR_USEPOLLING: 'true'
+      WATCHPACK_POLLING: 'true'
+    ports:
+      - '${REACT_PORT:-3001}:3000'
+    volumes:
+      - ./services/react:/app
+      - react_node_modules:/app/node_modules
+    networks:
+      - frontend_network
+    stdin_open: true
+    tty: true
+
+  next:
+    build:
+      context: ./services/next
+      dockerfile: ../../docker/next/Dockerfile.dev
+    container_name: ${COMPOSE_PROJECT_NAME:-dev}_next
+    restart: unless-stopped
+    env_file:
+      - ${ENV_DIR:-.}/.env.next
+    environment:
+      NODE_ENV: development
+      WATCHPACK_POLLING: 'true'
+    ports:
+      - '${NEXT_PORT:-3002}:3000'
+    volumes:
+      - ./services/next:/app
+      - next_node_modules:/app/node_modules
+      - next_cache:/app/.next
+    networks:
+      - frontend_network
+    depends_on:
+      - nestjs
+      - laravel
+
+  # ===========================================================================
+  # INFRASTRUCTURE
+  # ===========================================================================
+
+  nginx:
+    image: nginx:alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-dev}_nginx
+    restart: unless-stopped
+    ports:
+      - '${NGINX_HTTP_PORT:-80}:80'
+    volumes:
+      - ./config/nginx/dev:/etc/nginx/conf.d:ro
+      - ./config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - frontend_network
+      - backend_network
+    depends_on:
+      - laravel
+      - nestjs
+      - react
+      - next
+
+  # ===========================================================================
+  # DEV TOOLS
+  # ===========================================================================
+
+  mailhog:
+    image: mailhog/mailhog
+    container_name: ${COMPOSE_PROJECT_NAME:-dev}_mailhog
+    restart: unless-stopped
+    ports:
+      - '${MAILHOG_SMTP_PORT:-1025}:1025'
+      - '${MAILHOG_WEB_PORT:-8025}:8025'
+    networks:
+      - backend_network
+
+  adminer:
+    image: adminer
+    container_name: ${COMPOSE_PROJECT_NAME:-dev}_adminer
+    restart: unless-stopped
+    ports:
+      - '${ADMINER_PORT:-8080}:8080'
+    networks:
+      - backend_network
+    depends_on:
+      - mysql
+      - postgres
+
+  mongo-express:
+    image: mongo-express
+    container_name: ${COMPOSE_PROJECT_NAME:-dev}_mongo_express
+    restart: unless-stopped
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: ${MONGO_ROOT_USERNAME:-admin}
+      ME_CONFIG_MONGODB_ADMINPASSWORD: ${MONGO_ROOT_PASSWORD:-devpassword}
+      ME_CONFIG_MONGODB_URL: mongodb://${MONGO_ROOT_USERNAME:-admin}:${MONGO_ROOT_PASSWORD:-devpassword}@mongo:27017/
+      ME_CONFIG_BASICAUTH: 'false'
+    ports:
+      - '${MONGO_EXPRESS_PORT:-8081}:8081'
+    networks:
+      - backend_network
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  redis-commander:
+    image: rediscommander/redis-commander
+    container_name: ${COMPOSE_PROJECT_NAME:-dev}_redis_commander
+    restart: unless-stopped
+    environment:
+      REDIS_HOSTS: 'local:redis:6379:0:${REDIS_PASSWORD:-devpassword}'
+    ports:
+      - '${REDIS_COMMANDER_PORT:-8082}:8081'
+    networks:
+      - backend_network
+    depends_on:
+      redis:
+        condition: service_healthy
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+volumes:
+  mongo_data:
+  mongo_config:
+  redis_data:
+  mysql_data:
+  postgres_data:
+  laravel_vendor:
+  laravel_storage:
+  nestjs_node_modules:
+  react_node_modules:
+  next_node_modules:
+  next_cache:
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+  backend_network:
+    driver: bridge
+  frontend_network:
+    driver: bridge

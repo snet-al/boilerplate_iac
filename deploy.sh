@@ -10,7 +10,6 @@ set -e
 
 CLIENT=""
 SITE="primary"
-ENVIRONMENT="prod"
 APPS=""
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_DIR="$PROJECT_ROOT/env"
@@ -18,21 +17,21 @@ DEPLOY_DIR="$PROJECT_ROOT/.deploy"
 
 show_help() {
     cat << EOF
-Usage: ./deploy.sh [options]
+          Usage: ./deploy.sh [options]
 
-Options:
-  -c, --client      Client name (folder inside env/) - REQUIRED
-  -s, --site        Deployment site (primary|secondary) - default: primary
-  -a, --apps        Comma-separated list of apps to deploy
-  -h, --help        Show this help message
+          Options:
+            -c, --client      Client name (folder inside env/) - REQUIRED
+            -s, --site        Deployment site (primary|secondary) - default: primary
+            -a, --apps        Comma-separated list of apps to deploy
+            -h, --help        Show this help message
 
-Examples:
-  ./deploy.sh -c acme-corp                          # Deploy all apps
-  ./deploy.sh -c acme-corp -s secondary             # Deploy to secondary site
-  ./deploy.sh -c acme-corp -a laravel,mysql,redis   # Deploy specific apps
+          Examples:
+            ./deploy.sh -c acme-corp                          # Deploy all apps
+            ./deploy.sh -c acme-corp -s secondary             # Deploy to secondary site
+            ./deploy.sh -c acme-corp -a laravel,mysql,redis   # Deploy specific apps
 
-For Kubernetes deployment, use: ./k.sh -c <client> -n <namespace>
-For monitoring, use: ./monitor.sh
+          For Kubernetes deployment, use: ./k.sh -c <client> -n <namespace>
+          For monitoring, use: ./monitor.sh
 EOF
 }
 

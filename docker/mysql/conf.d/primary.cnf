@@ -1,0 +1,25 @@
+# MySQL Primary (Master) Configuration
+[mysqld]
+# Server identification
+server-id = 1
+
+# Binary logging for replication
+log-bin = mysql-bin
+binlog-format = ROW
+binlog-row-image = FULL
+expire_logs_days = 7
+
+# GTID based replication
+gtid-mode = ON
+enforce-gtid-consistency = ON
+log-slave-updates = ON
+
+# Performance
+innodb_buffer_pool_size = 1G
+innodb_log_file_size = 256M
+innodb_flush_log_at_trx_commit = 1
+sync_binlog = 1
+
+# Character set
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci

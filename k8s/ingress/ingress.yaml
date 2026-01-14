@@ -1,0 +1,99 @@
+# =============================================================================
+# KUBERNETES INGRESS
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-ingress
+  namespace: app
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # Rate limiting
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-connections: "50"
+spec:
+  tls:
+    - hosts:
+        - example.com
+        - www.example.com
+        - api.example.com
+      secretName: app-tls-secret
+  rules:
+    # Main frontend (Next.js)
+    - host: example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: next
+                port:
+                  number: 3000
+    - host: www.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: next
+                port:
+                  number: 3000
+    # API Gateway
+    - host: api.example.com
+      http:
+        paths:
+          # Laravel API
+          - path: /laravel
+            pathType: Prefix
+            backend:
+              service:
+                name: laravel
+                port:
+                  number: 8000
+          # NestJS API (default)
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: nestjs
+                port:
+                  number: 3000
+---
+# WebSocket Ingress (separate for different timeout settings)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: websocket-ingress
+  namespace: app
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$binary_remote_addr"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "upgrade";
+spec:
+  tls:
+    - hosts:
+        - ws.example.com
+      secretName: app-tls-secret
+  rules:
+    - host: ws.example.com
+      http:
+        paths:
+          - path: /socket.io
+            pathType: Prefix
+            backend:
+              service:
+                name: nestjs
+                port:
+                  number: 3000

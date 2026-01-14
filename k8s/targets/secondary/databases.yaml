@@ -1,0 +1,107 @@
+# =============================================================================
+# SECONDARY SITE - DATABASE CONFIGURATIONS
+# Replica databases (read-only, slaves to primary site)
+# =============================================================================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mysql-secondary
+  namespace: app
+  labels:
+    app: mysql
+    role: secondary
+    site: secondary
+spec:
+  serviceName: mysql-secondary
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mysql
+      role: secondary
+  template:
+    metadata:
+      labels:
+        app: mysql
+        role: secondary
+        site: secondary
+    spec:
+      initContainers:
+        - name: init-replication
+          image: mysql:8
+          command:
+            - bash
+            - -c
+            - |
+              echo "Waiting for primary to be ready..."
+              until mysql -h $MYSQL_PRIMARY_HOST -u root -p$MYSQL_ROOT_PASSWORD -e "SELECT 1"; do
+                sleep 5
+              done
+              echo "Primary is ready"
+          env:
+            - name: MYSQL_PRIMARY_HOST
+              value: "mysql-primary.primary-namespace.svc.cluster.local"
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secrets
+                  key: MYSQL_ROOT_PASSWORD
+      containers:
+        - name: mysql
+          image: mysql:8
+          ports:
+            - containerPort: 3306
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secrets
+                  key: MYSQL_ROOT_PASSWORD
+          args:
+            - --server-id=2
+            - --log-bin=mysql-bin
+            - --binlog-format=ROW
+            - --gtid-mode=ON
+            - --enforce-gtid-consistency=ON
+            - --log-slave-updates=ON
+            - --read-only=ON
+            - --super-read-only=ON
+            - --relay-log=relay-bin
+            - --innodb-buffer-pool-size=1G
+            - --max-connections=500
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "2000m"
+              memory: "4Gi"
+          volumeMounts:
+            - name: mysql-data
+              mountPath: /var/lib/mysql
+  volumeClaimTemplates:
+    - metadata:
+        name: mysql-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 100Gi
+---
+# Service for secondary MySQL
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql-secondary
+  namespace: app
+  labels:
+    app: mysql
+    role: secondary
+spec:
+  type: ClusterIP
+  ports:
+    - port: 3306
+      targetPort: 3306
+  selector:
+    app: mysql
+    role: secondary

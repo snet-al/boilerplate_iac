@@ -1,0 +1,493 @@
+# =============================================================================
+# DOCKER COMPOSE - PRIMARY SITE (MASTER)
+# =============================================================================
+# Primary production site with full database write capabilities
+# Master databases with replication setup to secondary site
+# Usage: docker-compose -f docker-compose.primary.yaml up -d
+# =============================================================================
+
+version: '3.8'
+
+services:
+  # ===========================================================================
+  # DATABASES - MASTER CONFIGURATION
+  # ===========================================================================
+
+  mongo-primary:
+    image: mongo:7
+    container_name: ${COMPOSE_PROJECT_NAME:-primary}_mongo
+    restart: always
+    env_file:
+      - ${ENV_DIR:-.}/.env.mongo
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-app_db}
+    command: >
+      mongod
+      --replSet rs0
+      --bind_ip_all
+      --keyFile /etc/mongo/replica.key
+    volumes:
+      - mongo_primary_data:/data/db
+      - mongo_primary_config:/data/configdb
+      - ./docker/mongo/init:/docker-entrypoint-initdb.d:ro
+      - ./docker/mongo/replica.key:/etc/mongo/replica.key:ro
+    networks:
+      - backend_network
+      - replication_network
+    ports:
+      - '27017:27017'
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 1G
+    healthcheck:
+      test: ['CMD', 'mongosh', '--eval', "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '200m'
+        max-file: '10'
+
+  redis-primary:
+    image: redis:7-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-primary}_redis
+    restart: always
+    env_file:
+      - ${ENV_DIR:-.}/.env.redis
+    command: >
+      redis-server
+      --appendonly yes
+      --requirepass ${REDIS_PASSWORD}
+      --maxmemory 1gb
+      --maxmemory-policy allkeys-lru
+      --repl-diskless-sync yes
+      --repl-diskless-sync-delay 5
+    volumes:
+      - redis_primary_data:/data
+    networks:
+      - backend_network
+      - replication_network
+    ports:
+      - '6379:6379'
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      test: ['CMD', 'redis-cli', '-a', '${REDIS_PASSWORD}', 'ping']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '100m'
+        max-file: '5'
+
+  mysql-primary:
+    image: mysql:8
+    container_name: ${COMPOSE_PROJECT_NAME:-primary}_mysql
+    restart: always
+    env_file:
+      - ${ENV_DIR:-.}/.env.mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-app_db}
+      MYSQL_USER: ${MYSQL_USER:-app_user}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    command: >
+      --server-id=1
+      --log-bin=mysql-bin
+      --binlog-format=ROW
+      --gtid-mode=ON
+      --enforce-gtid-consistency=ON
+      --log-slave-updates=ON
+      --default-authentication-plugin=mysql_native_password
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --innodb-buffer-pool-size=2G
+      --max-connections=1000
+    volumes:
+      - mysql_primary_data:/var/lib/mysql
+      - ./docker/mysql/init:/docker-entrypoint-initdb.d:ro
+      - ./docker/mysql/conf.d/primary.cnf:/etc/mysql/conf.d/replication.cnf:ro
+    networks:
+      - backend_network
+      - replication_network
+    ports:
+      - '3306:3306'
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 1G
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', 'localhost']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '200m'
+        max-file: '10'
+
+  postgres-primary:
+    image: postgres:16-alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-primary}_postgres
+    restart: always
+    env_file:
+      - ${ENV_DIR:-.}/.env.postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-app_db}
+      POSTGRES_USER: ${POSTGRES_USER:-app_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_REPLICATION_USER: ${POSTGRES_REPLICATION_USER:-replicator}
+      POSTGRES_REPLICATION_PASSWORD: ${POSTGRES_REPLICATION_PASSWORD}
+    command: >
+      postgres
+      -c wal_level=replica
+      -c hot_standby=on
+      -c max_wal_senders=10
+      -c max_replication_slots=10
+      -c hot_standby_feedback=on
+      -c shared_buffers=1GB
+      -c effective_cache_size=3GB
+      -c work_mem=32MB
+      -c maintenance_work_mem=256MB
+      -c max_connections=500
+    volumes:
+      - postgres_primary_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./docker/postgres/primary/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+    networks:
+      - backend_network
+      - replication_network
+    ports:
+      - '5432:5432'
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 1G
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-app_user}']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '200m'
+        max-file: '10'
+
+  # ===========================================================================
+  # BACKENDS
+  # ===========================================================================
+
+  laravel:
+    build:
+      context: ./apps/laravel
+      dockerfile: ../../docker/laravel/Dockerfile.prod
+    container_name: ${COMPOSE_PROJECT_NAME:-primary}_laravel
+    restart: always
+    env_file:
+      - ${ENV_DIR:-.}/.env.laravel
+    environment:
+      APP_ENV: production
+      APP_DEBUG: 'false'
+      LOG_LEVEL: warning
+      DB_CONNECTION: mysql
+      DB_HOST: mysql-primary
+      REDIS_HOST: redis-primary
+    volumes:
+      - laravel_storage:/var/www/html/storage
+    networks:
+      - backend_network
+      - frontend_network
+    depends_on:
+      mysql-primary:
+        condition: service_healthy
+      redis-primary:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:8000/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '100m'
+        max-file: '5'
+
+  nestjs:
+    build:
+      context: ./apps/nestjs
+      dockerfile: ../../docker/nestjs/Dockerfile.prod
+    container_name: ${COMPOSE_PROJECT_NAME:-primary}_nestjs
+    restart: always
+    env_file:
+      - ${ENV_DIR:-.}/.env.nestjs
+    environment:
+      NODE_ENV: production
+      DATABASE_HOST: postgres-primary
+      REDIS_HOST: redis-primary
+      MONGO_HOST: mongo-primary
+    networks:
+      - backend_network
+      - frontend_network
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+      redis-primary:
+        condition: service_healthy
+      mongo-primary:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3000/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '100m'
+        max-file: '5'
+
+  # ===========================================================================
+  # FRONTENDS
+  # ===========================================================================
+
+  react:
+    build:
+      context: ./apps/react
+      dockerfile: ../../docker/react/Dockerfile.prod
+    container_name: ${COMPOSE_PROJECT_NAME:-primary}_react
+    restart: always
+    env_file:
+      - ${ENV_DIR:-.}/.env.react
+    networks:
+      - frontend_network
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:80']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '50m'
+        max-file: '3'
+
+  next:
+    build:
+      context: ./apps/next
+      dockerfile: ../../docker/next/Dockerfile.prod
+    container_name: ${COMPOSE_PROJECT_NAME:-primary}_next
+    restart: always
+    env_file:
+      - ${ENV_DIR:-.}/.env.next
+    networks:
+      - frontend_network
+    depends_on:
+      - nestjs
+      - laravel
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3000']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '50m'
+        max-file: '3'
+
+  # ===========================================================================
+  # INFRASTRUCTURE
+  # ===========================================================================
+
+  nginx:
+    image: nginx:alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-primary}_nginx
+    restart: always
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./config/nginx/prod:/etc/nginx/conf.d:ro
+      - ./config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./config/nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_cache:/var/cache/nginx
+    networks:
+      - frontend_network
+      - backend_network
+    depends_on:
+      - laravel
+      - nestjs
+      - react
+      - next
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test: ['CMD', 'nginx', '-t']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '100m'
+        max-file: '5'
+
+  # ===========================================================================
+  # MONITORING & OBSERVABILITY
+  # ===========================================================================
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ${COMPOSE_PROJECT_NAME:-primary}_prometheus
+    restart: always
+    volumes:
+      - ./config/prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+    networks:
+      - backend_network
+    ports:
+      - '9090:9090'
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ${COMPOSE_PROJECT_NAME:-primary}_grafana
+    restart: always
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-piechart-panel
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - backend_network
+    ports:
+      - '3003:3000'
+    depends_on:
+      - prometheus
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+volumes:
+  mongo_primary_data:
+    driver: local
+  mongo_primary_config:
+    driver: local
+  redis_primary_data:
+    driver: local
+  mysql_primary_data:
+    driver: local
+  postgres_primary_data:
+    driver: local
+  laravel_storage:
+    driver: local
+  nginx_cache:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+  backend_network:
+    driver: bridge
+  frontend_network:
+    driver: bridge
+  replication_network:
+    driver: bridge
+    # For cross-host replication, use overlay network with Docker Swarm
+    # driver: overlay
+    # attachable: true

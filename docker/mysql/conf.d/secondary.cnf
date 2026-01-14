@@ -1,0 +1,26 @@
+# MySQL Secondary (Slave) Configuration
+[mysqld]
+# Server identification (must be unique)
+server-id = 2
+
+# Binary logging (for cascading replication if needed)
+log-bin = mysql-bin
+binlog-format = ROW
+relay-log = relay-bin
+
+# GTID based replication
+gtid-mode = ON
+enforce-gtid-consistency = ON
+log-slave-updates = ON
+
+# Read-only mode for slave
+read-only = ON
+super-read-only = ON
+
+# Performance
+innodb_buffer_pool_size = 1G
+innodb_log_file_size = 256M
+
+# Character set
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci

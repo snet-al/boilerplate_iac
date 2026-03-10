@@ -1,83 +1,56 @@
 #!/bin/bash
-set -e
-
 # =============================================================================
 # CLONE.SH - Clone App Repositories
 # =============================================================================
+# Clones (or updates) all repos listed in REPOS into PROJECT_ROOT/apps.
+# Edit the REPOS array below to set repo URLs and optional branch per line.
+#
 # Usage: ./clone.sh [options]
+#
 # Options:
-#   -a, --app         Clone specific app (laravel|nestjs|react|next)
-#   -b, --branch      Branch to clone (default: main)
-#   -h, --help        Show this help message
+#   -b, --branch      Default branch when not specified per repo (default: main)
 # =============================================================================
 
-# Default values
-APP=""
+set -e
+
 BRANCH="main"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 APPS_DIR="$PROJECT_ROOT/apps"
 
-# CUSTOMIZE THESE FOR YOUR PROJECT
-declare -A APP_REPOS=(
-    ["laravel"]="https://github.com/your-org/laravel-app.git"
-    ["nestjs"]="https://github.com/your-org/nestjs-app.git"
-    ["react"]="https://github.com/your-org/react-app.git"
-    ["next"]="https://github.com/your-org/next-app.git"
+# CUSTOMIZE: "repo_url" "branch" (one per line). Branch optional; uses -b default if omitted.
+REPOS=(
+    "https://github.com/your-org/laravel-app.git main"
+    "https://github.com/your-org/nestjs-app.git main"
+    "https://github.com/your-org/react-app.git main"
+    "https://github.com/your-org/next-app.git main"
 )
-
-show_help() {
-    cat << EOF
-Usage: ./clone.sh [options]
-
-Options:
-  -a, --app       Clone specific app (laravel|nestjs|react|next)
-  -b, --branch    Branch to clone (default: main)
-  -h, --help      Show this help message
-
-Examples:
-  ./clone.sh                    # Clone all apps
-  ./clone.sh -a laravel         # Clone only Laravel app
-  ./clone.sh -b develop         # Clone all apps from develop branch
-EOF
-}
-
-clone_app() {
-    local app=$1
-    local repo_url="${APP_REPOS[$app]}"
-    local app_dir="$APPS_DIR/$app"
-
-    [[ -z "$repo_url" ]] && echo "Error: Unknown app: $app" && return 1
-
-    if [[ -d "$app_dir" ]]; then
-        echo "Updating $app..."
-        git -C "$app_dir" fetch
-        git -C "$app_dir" pull
-    else
-        echo "Cloning $app..."
-        git clone --branch "$BRANCH" "$repo_url" "$app_dir" 2>/dev/null || {
-            echo "Error: Failed to clone $app"
-            return 1
-        }
-    fi
-}
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        -a|--app) APP="$2"; shift 2 ;;
         -b|--branch) BRANCH="$2"; shift 2 ;;
-        -h|--help) show_help; exit 0 ;;
-        *) echo "Error: Unknown option: $1"; show_help; exit 1 ;;
+        *) echo "Error: Unknown option: $1"; exit 1 ;;
     esac
 done
 
 mkdir -p "$APPS_DIR"
 
-if [[ -n "$APP" ]]; then
-    clone_app "$APP"
-else
-    for app in "${!APP_REPOS[@]}"; do
-        clone_app "$app"
-    done
-fi
+for entry in "${REPOS[@]}"; do
+    read -r repo_url branch <<< "$entry"
+    branch=${branch:-$BRANCH}
+    name=$(basename "${repo_url%.git}")
+    repo_dir="$APPS_DIR/$name"
+
+    if [[ -d "$repo_dir" ]]; then
+        echo "Updating $name..."
+        git -C "$repo_dir" fetch
+        git -C "$repo_dir" pull
+    else
+        echo "Cloning $name..."
+        git clone --branch "$branch" "$repo_url" "$repo_dir" 2>/dev/null || {
+            echo "Error: Failed to clone $name"
+            exit 1
+        }
+    fi
+done
 
 echo "Done!"

@@ -17,7 +17,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-prod}_mongo
     restart: always
     env_file:
-      - ${ENV_DIR:-.}/.env.mongo
+      - ${ENV_DIR:-.}/.env.db.mongo
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
@@ -53,7 +53,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-prod}_redis
     restart: always
     env_file:
-      - ${ENV_DIR:-.}/.env.redis
+      - ${ENV_DIR:-.}/.env.db.redis
     command: >
       redis-server
       --appendonly yes
@@ -88,7 +88,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-prod}_mysql
     restart: always
     env_file:
-      - ${ENV_DIR:-.}/.env.mysql
+      - ${ENV_DIR:-.}/.env.db.mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-app_db}
@@ -131,7 +131,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-prod}_postgres
     restart: always
     env_file:
-      - ${ENV_DIR:-.}/.env.postgres
+      - ${ENV_DIR:-.}/.env.db.postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-app_db}
       POSTGRES_USER: ${POSTGRES_USER:-app_user}

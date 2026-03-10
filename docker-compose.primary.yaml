@@ -18,7 +18,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-primary}_mongo
     restart: always
     env_file:
-      - ${ENV_DIR:-.}/.env.mongo
+      - ${ENV_DIR:-.}/.env.db.mongo
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
@@ -63,7 +63,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-primary}_redis
     restart: always
     env_file:
-      - ${ENV_DIR:-.}/.env.redis
+      - ${ENV_DIR:-.}/.env.db.redis
     command: >
       redis-server
       --appendonly yes
@@ -103,7 +103,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-primary}_mysql
     restart: always
     env_file:
-      - ${ENV_DIR:-.}/.env.mysql
+      - ${ENV_DIR:-.}/.env.db.mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-app_db}
@@ -155,7 +155,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-primary}_postgres
     restart: always
     env_file:
-      - ${ENV_DIR:-.}/.env.postgres
+      - ${ENV_DIR:-.}/.env.db.postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-app_db}
       POSTGRES_USER: ${POSTGRES_USER:-app_user}
@@ -214,7 +214,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-primary}_laravel
     restart: always
     env_file:
-      - ${ENV_DIR:-.}/.env.laravel
+      - ${ENV_DIR:-.}/.env.back.laravel
     environment:
       APP_ENV: production
       APP_DEBUG: 'false'
@@ -260,7 +260,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-primary}_nestjs
     restart: always
     env_file:
-      - ${ENV_DIR:-.}/.env.nestjs
+      - ${ENV_DIR:-.}/.env.back.nestjs
     environment:
       NODE_ENV: production
       DATABASE_HOST: postgres-primary
@@ -308,7 +308,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-primary}_react
     restart: always
     env_file:
-      - ${ENV_DIR:-.}/.env.react
+      - ${ENV_DIR:-.}/.env.front.react
     networks:
       - frontend_network
     deploy:
@@ -338,7 +338,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-primary}_next
     restart: always
     env_file:
-      - ${ENV_DIR:-.}/.env.next
+      - ${ENV_DIR:-.}/.env.front.next
     networks:
       - frontend_network
     depends_on:

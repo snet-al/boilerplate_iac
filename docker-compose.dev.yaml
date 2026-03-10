@@ -17,7 +17,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-dev}_mongo
     restart: unless-stopped
     env_file:
-      - ${ENV_DIR:-.}/.env.mongo
+      - ${ENV_DIR:-.}/.env.db.mongo
     environment:
       MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-admin}
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-devpassword}
@@ -41,7 +41,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-dev}_redis
     restart: unless-stopped
     env_file:
-      - ${ENV_DIR:-.}/.env.redis
+      - ${ENV_DIR:-.}/.env.db.redis
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-devpassword}
     ports:
       - '${REDIS_PORT:-6379}:6379'
@@ -60,7 +60,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-dev}_mysql
     restart: unless-stopped
     env_file:
-      - ${ENV_DIR:-.}/.env.mysql
+      - ${ENV_DIR:-.}/.env.db.mysql
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-devpassword}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-app_db}
@@ -95,7 +95,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-dev}_postgres
     restart: unless-stopped
     env_file:
-      - ${ENV_DIR:-.}/.env.postgres
+      - ${ENV_DIR:-.}/.env.db.postgres
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-app_db}
       POSTGRES_USER: ${POSTGRES_USER:-app_user}
@@ -128,7 +128,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-dev}_laravel
     restart: unless-stopped
     env_file:
-      - ${ENV_DIR:-.}/.env.laravel
+      - ${ENV_DIR:-.}/.env.back.laravel
     environment:
       APP_ENV: local
       APP_DEBUG: 'true'
@@ -160,7 +160,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-dev}_nestjs
     restart: unless-stopped
     env_file:
-      - ${ENV_DIR:-.}/.env.nestjs
+      - ${ENV_DIR:-.}/.env.back.nestjs
     environment:
       NODE_ENV: development
       DEBUG: 'nestjs:*'
@@ -197,7 +197,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-dev}_react
     restart: unless-stopped
     env_file:
-      - ${ENV_DIR:-.}/.env.react
+      - ${ENV_DIR:-.}/.env.front.react
     environment:
       NODE_ENV: development
       CHOKIDAR_USEPOLLING: 'true'
@@ -219,7 +219,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME:-dev}_next
     restart: unless-stopped
     env_file:
-      - ${ENV_DIR:-.}/.env.next
+      - ${ENV_DIR:-.}/.env.front.next
     environment:
       NODE_ENV: development
       WATCHPACK_POLLING: 'true'

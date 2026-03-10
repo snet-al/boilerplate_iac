@@ -1,15 +1,17 @@
 #!/bin/bash
-set -e
-
 # =============================================================================
 # RUN.SH - Local Development Runner
 # =============================================================================
+# Starts services with docker-compose.dev.yaml. Use -a to run specific apps only.
+#
 # Usage: ./run.sh [options]
+#
 # Options:
-#   -a, --apps        Comma-separated list of apps to run
-#   -b, --build       Force rebuild images
-#   -h, --help        Show this help message
+#   -a, --apps        Comma-separated list of apps to run (default: all)
+#   -b, --build       Force rebuild and recreate containers
 # =============================================================================
+
+set -e
 
 APPS=""
 BUILD=""
@@ -19,28 +21,11 @@ COMPOSE_FILE="docker-compose.dev.yaml"
 COMPOSE_CMD="docker-compose -f $PROJECT_ROOT/$COMPOSE_FILE"
 AVAILABLE_APPS=("mongo" "redis" "mysql" "postgres" "laravel" "nestjs" "react" "next" "nginx")
 
-show_help() {
-    cat << EOF
-Usage: ./run.sh [options]
-
-Options:
-  -a, --apps        Comma-separated list of apps to run
-                    Available: ${AVAILABLE_APPS[*]}
-  -h, --help        Show this help message
-
-Examples:
-  ./run.sh                                    # Run all apps
-  ./run.sh -a laravel,mysql,redis             # Run specific apps
-  ./run.sh -a nestjs,postgres -b              # Run with forced rebuild
-EOF
-}
-
 while [[ $# -gt 0 ]]; do
     case $1 in
         -a|--apps) APPS="$2"; shift 2 ;;
         -b|--build) BUILD="--build --force-recreate"; shift ;;
-        -h|--help) show_help; exit 0 ;;
-        *) echo "Error: Unknown option: $1"; show_help; exit 1 ;;
+        *) echo "Error: Unknown option: $1"; exit 1 ;;
     esac
 done
 

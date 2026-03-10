@@ -79,7 +79,7 @@ boilerplate_iac/
 │   └── next/                    # Next.js frontend app
 │
 ├── 📁 env/                      # Environment configurations
-│   └── example/                 # Example client (template)
+│   └── client/                  # Default client template/fallback
 │       ├── .env.back.laravel
 │       ├── .env.back.nestjs
 │       ├── .env.front.react
@@ -150,13 +150,13 @@ cd boilerplate_iac
 
 ```bash
 # Deploy for a specific client
-./deploy.sh -c my-client -t primary
+./deploy.sh -c my-client -s primary
 
 # Deploy to secondary site
-./deploy.sh -c my-client -t secondary
+./deploy.sh -c my-client -s secondary
 
 # Deploy to Kubernetes
-./deploy.sh -c my-client -k -n my-namespace
+./k.sh -c my-client -n my-namespace
 ```
 
 ## 🔧 Services
@@ -208,19 +208,19 @@ cd boilerplate_iac
 ./run.sh -e dev
 
 # Production - Primary Site
-./deploy.sh -c <client> -t primary
+./deploy.sh -c <client> -s primary
 
 # Production - Secondary Site (replicas)
-./deploy.sh -c <client> -t secondary
+./deploy.sh -c <client> -s secondary
 ```
 
 ### Environment Files
 
 The `deploy.sh` script automatically:
 
-1. Copies client-specific environment files
-2. Adds deployment metadata
-3. Validates configurations
+1. Reads environment files directly from `env/<client>`
+2. Falls back to `env/client` when the client folder is missing
+3. Validates deployment inputs
 
 ### Compose Files
 
@@ -262,11 +262,11 @@ apps/
 
 ### Environment Configuration
 
-Copy example env files and customize for your deployment:
+Use the default client env files and customize for your deployment:
 
 ```
 env/
-└── example/
+└── client/
     ├── .env.back.laravel      # Laravel configuration
     ├── .env.back.nestjs       # NestJS configuration
     ├── .env.front.react       # React configuration
@@ -283,7 +283,7 @@ env/
 
 ```bash
 # Deploy with kubectl
-./deploy.sh -c my-client -k -n production
+./k.sh -c my-client -n production
 
 # Apply manifests manually
 kubectl apply -f k8s/namespaces/
@@ -386,19 +386,14 @@ Usage: ./deploy.sh [options]
 
 Options:
   -c, --client      Client name (required)
-  -t, --target      Deployment target (primary|secondary)
-  -e, --env         Environment (dev|prod)
-  -s, --services    Specific services to deploy
-  -k, --k8s         Deploy to Kubernetes
-  -n, --namespace   Kubernetes namespace
-  --dry-run         Preview without executing
+  -s, --site        Site (primary|secondary)
+  -a, --apps        Comma-separated apps to deploy
   -h, --help        Show help
 
 Examples:
   ./deploy.sh -c acme-corp                    # Deploy all
-  ./deploy.sh -c acme-corp -t secondary       # Deploy replica site
-  ./deploy.sh -c acme-corp -k -n production   # Kubernetes deploy
-  ./deploy.sh -c acme-corp --dry-run          # Preview
+  ./deploy.sh -c acme-corp -s secondary       # Deploy replica site
+  ./deploy.sh -c acme-corp -a laravel,mysql   # Deploy specific apps
 ```
 
 ### clone.sh

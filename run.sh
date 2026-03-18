@@ -24,8 +24,8 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         -a|--apps) APPS="$2"; shift 2 ;;
         -b|--build) BUILD="--build --force-recreate"; shift ;;
-        -h|--help) show_help; exit 0 ;;
-        *) echo "Error: Unknown option: $1"; show_help; exit 1 ;;
+        -h|--help) echo "Usage: ./run.sh [-a apps] [-b]"; exit 0 ;;
+        *) echo "Error: Unknown option: $1"; exit 1 ;;
     esac
 done
 

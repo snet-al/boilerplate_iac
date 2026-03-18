@@ -13,6 +13,7 @@ A comprehensive, production-ready Infrastructure as Code (IaC) boilerplate suppo
 - [Kubernetes](#-kubernetes)
 - [Configuration](#-configuration)
 - [Migration Checklist](#-migration-checklist)
+- [Scaffold Conventions](#scaffold-conventions)
 - [Scripts Reference](#-scripts-reference)
 
 ## 🏛️ Architecture Overview
@@ -81,7 +82,7 @@ boilerplate_iac/
 │   └── next/                    # Next.js frontend app
 │
 ├── 📁 env/                      # Environment configurations
-│   └── example/                 # Example client (template)
+│   └── client/                  # Client template (copy per client)
 │       ├── .env.back.laravel
 │       ├── .env.back.nestjs
 │       ├── .env.front.react
@@ -267,11 +268,11 @@ apps/
 
 ### Environment Configuration
 
-Copy example env files and customize for your deployment:
+Copy the client template folder and customize for your deployment:
 
 ```
 env/
-└── example/
+└── client/
     ├── .env.back.laravel      # Laravel configuration
     ├── .env.back.nestjs       # NestJS configuration
     ├── .env.front.react       # React configuration
@@ -382,6 +383,40 @@ Use this checklist when adopting the scaffold in a project that already has a li
 9. Only after replication is healthy should you point secondary-site app reads to the standby database.
 
 This scaffold is designed to preserve existing primary data. The risky part is usually not corruption of the primary, but starting a secondary from stale or unrelated data, or forgetting to create and verify the replication user on an already-initialized primary.
+
+### Scaffold Conventions
+
+When adapting this boilerplate for your project, follow these patterns to keep scripts clean and easy to modify.
+
+**Configuration as data, not logic.** Services and env file mappings are declared as arrays at the top of each script. To add or remove a service, edit the array -- don't touch the functions below it.
+
+```bash
+# app:source:destination
+ENV_FILES=(
+    "mongo:.env.db.mongo:.env.mongo"
+    "postgres:.env.db.postgres:.env.postgres"
+    "myapp:.env.back.myapp:.env.myapp"    # <- add your service here
+)
+```
+
+**No `show_help` functions.** Usage is documented in the header comment of each script. The `--help` flag prints a one-line usage string. This avoids duplicating documentation between the comment and a function body that inevitably falls out of sync.
+
+```bash
+# =============================================================================
+# DEPLOY-PRIMARY.SH - Primary Site Deployment
+# =============================================================================
+# Usage: ./deploy-primary.sh -c <client> [-a apps]
+# =============================================================================
+```
+
+**Database-specific logic stays in `docker/`.** Deploy scripts are thin orchestrators. Any logic tied to a specific database engine (SQL, connection checks, replication setup) lives in `docker/<engine>/` as a standalone script. Deploy scripts call it with a one-liner.
+
+```
+docker/postgres/primary/
+├── entrypoint.sh                  # runtime config (pg_hba.conf rendering)
+├── ensure-replication-user.sh     # post-startup replication role
+└── pg_hba.conf                    # auth template
+```
 
 ## 📜 Scripts Reference
 

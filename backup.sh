@@ -146,66 +146,6 @@ get_latest_backup() {
     return 1
 }
 
-show_help() {
-    cat << EOF
-=============================================================================
-BACKUP ORCHESTRATION SCRIPT
-=============================================================================
-Central orchestrator for database backup/restore operations
-Database selection is configured in backup.env or backup.prod.env
-
-Setup:
-    cp env/backup.env.example backup.env
-    cp env/backup.prod.env.example backup.prod.env
-    # Edit BACKUP_DATABASE setting in the .env file
-
-Usage: ./backup.sh <command> [options]
-
-Commands:
-    dump        Backup database (auto-organized: daily/weekly/monthly)
-    restore     Restore database from backup
-    list        List available backups
-    cleanup     Remove old backups based on rotation policy
-
-Options:
-    -e, --env           Environment (dev|prod) - default: dev
-    -n, --name          Override database name from config
-    
-    Restore options:
-    -f, --file          Specific backup file to restore
-    --date YYYY-MM-DD   Restore from specific date
-    --latest            Restore latest backup
-    --type TYPE         Backup type (daily|weekly|monthly) - with --date or --latest
-    
-    Other options:
-    --drop              Drop existing database before restore
-    --dry-run           Preview without executing
-    -h, --help          Show this help message
-
-Examples:
-    # Dump (automatically organized by type)
-    ./backup.sh dump                              # Daily/weekly/monthly based on date
-    ./backup.sh dump -e prod                      # Production backup
-    
-    # Restore by date
-    ./backup.sh restore --date 2026-01-12         # Restore from Jan 12
-    ./backup.sh restore --date 2026-01-12 --type weekly  # Specific type
-    
-    # Restore latest
-    ./backup.sh restore --latest                  # Latest backup (any type)
-    ./backup.sh restore --latest --type daily     # Latest daily backup
-    
-    # Restore by file
-    ./backup.sh restore -f backup.dump
-    
-    # List and cleanup
-    ./backup.sh list                              # List all backups
-    ./backup.sh cleanup                           # Clean based on rotation policy
-
-EOF
-    exit 0
-}
-
 # =============================================================================
 # ENVIRONMENT LOADING
 # =============================================================================
@@ -323,7 +263,8 @@ load_environment() {
 # PARSE ARGUMENTS
 # =============================================================================
 if [[ $# -eq 0 ]]; then
-    show_help
+    echo "Usage: ./backup.sh <dump|restore|list|cleanup> [options]"
+    exit 0
 fi
 
 # First argument is the command
@@ -366,19 +307,20 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -h|--help)
-            show_help
+            echo "Usage: ./backup.sh <dump|restore|list|cleanup> [options]"
+            exit 0
             ;;
         *)
             log "ERROR: Unknown option: $1"
-            show_help
+            exit 1
             ;;
     esac
 done
 
 # Validate command
 if [[ ! "$COMMAND" =~ ^(dump|restore|list|cleanup)$ ]]; then
-    log "ERROR: Invalid command: $COMMAND"
-    show_help
+    log "ERROR: Invalid command: $COMMAND. Must be: dump|restore|list|cleanup"
+    exit 1
 fi
 
 # Validate environment

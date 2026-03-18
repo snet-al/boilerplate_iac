@@ -105,6 +105,7 @@ deploy() {
     local expanded_app=""
     local app_key=""
     local services_to_deploy=()
+    local deploying_postgres=false
 
     if [[ -n "$APPS" ]]; then
         IFS=',' read -ra APP_ARRAY <<< "$APPS"
@@ -124,6 +125,10 @@ deploy() {
 
         [[ ${#services_to_deploy[@]} -eq 0 ]] && echo "Error: No valid apps provided" && exit 1
 
+        for svc in "${services_to_deploy[@]}"; do
+            [[ "$svc" == "postgres-primary" ]] && deploying_postgres=true
+        done
+
         echo "Starting services: ${services_to_deploy[*]}"
         docker-compose "${compose_args[@]}" up -d "${services_to_deploy[@]}"
     else
@@ -131,7 +136,13 @@ deploy() {
             copy_env_file "$app"
         done
 
+        deploying_postgres=true
         docker-compose "${compose_args[@]}" up -d
+    fi
+
+    if [[ "$deploying_postgres" == true ]]; then
+        "$PROJECT_ROOT/docker/postgres/primary/ensure-replication-user.sh" \
+            "$DEPLOY_DIR/$CLIENT/.env.postgres" "${compose_args[@]}"
     fi
 
     docker-compose "${compose_args[@]}" ps

@@ -162,6 +162,8 @@ services:
     command:
       - postgres
       - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
       - wal_level=replica
       - -c
       - hot_standby=on

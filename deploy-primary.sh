@@ -15,49 +15,28 @@ ENV_DIR="$PROJECT_ROOT/env"
 DEPLOY_DIR="$PROJECT_ROOT/.deploy"
 COMPOSE_FILE="$PROJECT_ROOT/docker-compose.primary.yaml"
 
-show_help() {
-    cat << EOF
-Usage: ./deploy-primary.sh [options]
+# app:source:destination
+ENV_FILES=(
+    "mongo:.env.db.mongo:.env.mongo"
+    "redis:.env.db.redis:.env.redis"
+    "mysql:.env.db.mysql:.env.mysql"
+    "postgres:.env.db.postgres:.env.postgres"
+    "laravel:.env.back.laravel:.env.laravel"
+    "nestjs:.env.back.nestjs:.env.nestjs"
+    "react:.env.front.react:.env.react"
+    "next:.env.front.next:.env.next"
+)
 
-Options:
-  -c, --client      Client name (folder inside env/) - REQUIRED
-  -a, --apps        Comma-separated apps to deploy
-                    Use db/databases for all primary databases
-                    Use apps for all application services
-  -h, --help        Show this help message
-
-Examples:
-  ./deploy-primary.sh -c acme-corp
-  ./deploy-primary.sh -c acme-corp -a mysql
-  ./deploy-primary.sh -c acme-corp -a db
-  ./deploy-primary.sh -c acme-corp -a apps,nginx
-EOF
-}
-
-copy_env_file() {
-    local app=$1
-    local env_file="" dest_file=""
-
-    case $app in
-        mongo) env_file=".env.db.mongo"; dest_file=".env.mongo" ;;
-        redis) env_file=".env.db.redis"; dest_file=".env.redis" ;;
-        mysql) env_file=".env.db.mysql"; dest_file=".env.mysql" ;;
-        postgres) env_file=".env.db.postgres"; dest_file=".env.postgres" ;;
-        laravel) env_file=".env.back.laravel"; dest_file=".env.laravel" ;;
-        nestjs) env_file=".env.back.nestjs"; dest_file=".env.nestjs" ;;
-        react) env_file=".env.front.react"; dest_file=".env.react" ;;
-        next) env_file=".env.front.next"; dest_file=".env.next" ;;
-    esac
-
-    [[ -z "$env_file" ]] && return
-
-    local source_path="$CLIENT_ENV_DIR/$env_file"
-    local dest_path="$DEPLOY_DIR/$CLIENT/$dest_file"
-
-    if [[ -f "$source_path" ]]; then
-        cp "$source_path" "$dest_path"
-        echo "Copied env for $app"
-    fi
+copy_env() {
+    local target=$1
+    for entry in "${ENV_FILES[@]}"; do
+        IFS=':' read -r app src dst <<< "$entry"
+        if [[ "$app" == "$target" && -f "$CLIENT_ENV_DIR/$src" ]]; then
+            cp "$CLIENT_ENV_DIR/$src" "$DEPLOY_DIR/$CLIENT/$dst"
+            echo "Copied $src"
+            return
+        fi
+    done
 }
 
 normalize_app_name() {
@@ -118,7 +97,7 @@ deploy() {
                 [[ -z "$expanded_app" ]] && continue
 
                 app_key="$(normalize_app_name "$expanded_app")"
-                copy_env_file "$app_key"
+                copy_env "$app_key"
                 services_to_deploy+=("$(resolve_service_name "$expanded_app")")
             done < <(expand_requested_app "$requested_app")
         done
@@ -132,8 +111,9 @@ deploy() {
         echo "Starting services: ${services_to_deploy[*]}"
         docker-compose "${compose_args[@]}" up -d "${services_to_deploy[@]}"
     else
-        for app in mongo redis mysql postgres laravel nestjs react next; do
-            copy_env_file "$app"
+        for entry in "${ENV_FILES[@]}"; do
+            IFS=':' read -r app _ _ <<< "$entry"
+            copy_env "$app"
         done
 
         deploying_postgres=true
@@ -152,8 +132,8 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         -c|--client) CLIENT="$2"; shift 2 ;;
         -a|--apps) APPS="$2"; shift 2 ;;
-        -h|--help) show_help; exit 0 ;;
-        *) echo "Error: Unknown option: $1"; show_help; exit 1 ;;
+        -h|--help) echo "Usage: ./deploy-primary.sh -c <client> [-a apps]"; exit 0 ;;
+        *) echo "Error: Unknown option: $1"; exit 1 ;;
     esac
 done
 

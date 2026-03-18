@@ -12,6 +12,7 @@ A comprehensive, production-ready Infrastructure as Code (IaC) boilerplate suppo
 - [Client Management](#-client-management)
 - [Kubernetes](#-kubernetes)
 - [Configuration](#-configuration)
+- [Migration Checklist](#-migration-checklist)
 - [Scripts Reference](#-scripts-reference)
 
 ## 🏛️ Architecture Overview
@@ -63,7 +64,8 @@ A comprehensive, production-ready Infrastructure as Code (IaC) boilerplate suppo
 ```
 boilerplate_iac/
 ├── 📜 run.sh                    # Local development runner
-├── 📜 deploy.sh                 # Production deployment script
+├── 📜 deploy-primary.sh         # Primary site deployment script
+├── 📜 deploy-secondary.sh       # Secondary site deployment script
 ├── 📜 clone.sh                  # Clone app repositories
 │
 ├── 🐳 docker-compose.dev.yaml   # Development environment
@@ -149,14 +151,14 @@ cd boilerplate_iac
 ### Production Deployment
 
 ```bash
-# Deploy for a specific client
-./deploy.sh -c my-client -t primary
+# Deploy to the primary site
+./deploy-primary.sh -c my-client
 
-# Deploy to secondary site
-./deploy.sh -c my-client -t secondary
+# Deploy to the secondary site apps only
+./deploy-secondary.sh -c my-client
 
 # Deploy to Kubernetes
-./deploy.sh -c my-client -k -n my-namespace
+./k.sh -c my-client -n my-namespace
 ```
 
 ## 🔧 Services
@@ -208,15 +210,18 @@ cd boilerplate_iac
 ./run.sh -e dev
 
 # Production - Primary Site
-./deploy.sh -c <client> -t primary
+./deploy-primary.sh -c <client>
 
-# Production - Secondary Site (replicas)
-./deploy.sh -c <client> -t secondary
+# Production - Secondary Site apps only
+./deploy-secondary.sh -c <client>
+
+# Secondary replica databases only
+./deploy-secondary.sh -c <client> -a db
 ```
 
 ### Environment Files
 
-The `deploy.sh` script automatically:
+The deploy scripts automatically:
 
 1. Copies client-specific environment files
 2. Adds deployment metadata
@@ -283,7 +288,7 @@ env/
 
 ```bash
 # Deploy with kubectl
-./deploy.sh -c my-client -k -n production
+./k.sh -c my-client -n production
 
 # Apply manifests manually
 kubectl apply -f k8s/namespaces/
@@ -358,6 +363,26 @@ Primary → Replica Set (rs0) → Secondary
 Master → REPLICAOF → Slave (replica-read-only)
 ```
 
+### Migration Checklist
+
+Use this checklist when adopting the scaffold in a project that already has a live primary PostgreSQL database.
+
+1. Back up the current primary database before enabling replication.
+2. Keep the existing primary volume and data directory. Do not wipe or recreate the primary database just to enable replication.
+3. Set the PostgreSQL replication environment variables for the project:
+   `POSTGRES_PRIMARY_HOST`, `POSTGRES_PRIMARY_PORT`, `POSTGRES_SECONDARY_HOST`,
+   `POSTGRES_REPLICATION_USER`, `POSTGRES_REPLICATION_PASSWORD`, and `POSTGRES_REPLICATION_SLOT`.
+4. Restart only the primary database with the new replication settings first, then verify it starts cleanly with the existing data.
+5. `deploy-primary.sh` automatically re-applies the PostgreSQL replication role on the running primary container after startup. If you start the primary database some other way, manually verify that the replication role exists and can log in. Init scripts in `/docker-entrypoint-initdb.d` only run on first initialization of an empty data directory.
+6. Confirm the primary `pg_hba.conf` allows the secondary host IP or CIDR to connect for replication.
+7. Start the secondary database with a fresh empty volume so it can run `pg_basebackup` from the primary. Do not reuse an unrelated secondary volume from another project.
+8. Verify replication after startup:
+   on the secondary, `SELECT pg_is_in_recovery();` should return `true`;
+   on the primary, `SELECT * FROM pg_stat_replication;` should show the standby connection.
+9. Only after replication is healthy should you point secondary-site app reads to the standby database.
+
+This scaffold is designed to preserve existing primary data. The risky part is usually not corruption of the primary, but starting a secondary from stale or unrelated data, or forgetting to create and verify the replication user on an already-initialized primary.
+
 ## 📜 Scripts Reference
 
 ### run.sh
@@ -379,26 +404,39 @@ Examples:
   ./run.sh -e prod -d                   # Production, detached
 ```
 
-### deploy.sh
+### deploy-primary.sh
 
 ```bash
-Usage: ./deploy.sh [options]
+Usage: ./deploy-primary.sh [options]
 
 Options:
   -c, --client      Client name (required)
-  -t, --target      Deployment target (primary|secondary)
-  -e, --env         Environment (dev|prod)
-  -s, --services    Specific services to deploy
-  -k, --k8s         Deploy to Kubernetes
-  -n, --namespace   Kubernetes namespace
-  --dry-run         Preview without executing
+  -a, --apps        Specific apps to deploy
   -h, --help        Show help
 
 Examples:
-  ./deploy.sh -c acme-corp                    # Deploy all
-  ./deploy.sh -c acme-corp -t secondary       # Deploy replica site
-  ./deploy.sh -c acme-corp -k -n production   # Kubernetes deploy
-  ./deploy.sh -c acme-corp --dry-run          # Preview
+  ./deploy-primary.sh -c acme-corp            # Deploy primary stack
+  ./deploy-primary.sh -c acme-corp -a db      # Deploy primary databases only
+  ./deploy-primary.sh -c acme-corp -a apps    # Deploy application services only
+```
+
+### deploy-secondary.sh
+
+```bash
+Usage: ./deploy-secondary.sh [options]
+
+Options:
+  -c, --client      Client name (required)
+  -a, --apps        Specific apps to deploy
+                    Default: laravel,nestjs,react,next
+                    Use db to deploy replica databases only
+                    nginx is intentionally excluded
+  -h, --help        Show help
+
+Examples:
+  ./deploy-secondary.sh -c acme-corp          # Deploy secondary apps only
+  ./deploy-secondary.sh -c acme-corp -a db    # Deploy replica databases only
+  ./deploy-secondary.sh -c acme-corp -a react,next
 ```
 
 ### clone.sh
@@ -423,7 +461,6 @@ Examples:
 ## 🔐 Security Notes
 
 1. **Secrets Management**: In production, use external secrets management:
-
    - Kubernetes External Secrets
    - HashiCorp Vault
    - AWS Secrets Manager

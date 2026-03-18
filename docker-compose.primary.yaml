@@ -154,30 +154,44 @@ services:
     image: postgres:16-alpine
     container_name: ${COMPOSE_PROJECT_NAME:-primary}_postgres
     restart: always
+    entrypoint:
+      - /bin/sh
+      - /usr/local/bin/postgres-primary-entrypoint.sh
     env_file:
       - ${ENV_DIR:-.}/.env.postgres
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-app_db}
-      POSTGRES_USER: ${POSTGRES_USER:-app_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_REPLICATION_USER: ${POSTGRES_REPLICATION_USER:-replicator}
-      POSTGRES_REPLICATION_PASSWORD: ${POSTGRES_REPLICATION_PASSWORD}
-    command: >
-      postgres
-      -c wal_level=replica
-      -c hot_standby=on
-      -c max_wal_senders=10
-      -c max_replication_slots=10
-      -c hot_standby_feedback=on
-      -c shared_buffers=1GB
-      -c effective_cache_size=3GB
-      -c work_mem=32MB
-      -c maintenance_work_mem=256MB
-      -c max_connections=500
+    command:
+      - postgres
+      - -c
+      - wal_level=replica
+      - -c
+      - hot_standby=on
+      - -c
+      - max_wal_senders=10
+      - -c
+      - max_replication_slots=10
+      - -c
+      - wal_keep_size=512MB
+      - -c
+      - hot_standby_feedback=on
+      - -c
+      - listen_addresses=*
+      - -c
+      - hba_file=/tmp/postgresql/pg_hba.conf
+      - -c
+      - shared_buffers=1GB
+      - -c
+      - effective_cache_size=3GB
+      - -c
+      - work_mem=32MB
+      - -c
+      - maintenance_work_mem=256MB
+      - -c
+      - max_connections=500
     volumes:
       - postgres_primary_data:/var/lib/postgresql/data
       - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
-      - ./docker/postgres/primary/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./docker/postgres/primary/entrypoint.sh:/usr/local/bin/postgres-primary-entrypoint.sh:ro
+      - ./docker/postgres/primary/pg_hba.conf:/etc/postgresql/pg_hba.conf.template:ro
     networks:
       - backend_network
       - replication_network
@@ -192,7 +206,7 @@ services:
           cpus: '1'
           memory: 1G
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-app_user}']
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
       interval: 30s
       timeout: 10s
       retries: 5

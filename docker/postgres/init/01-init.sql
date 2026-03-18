@@ -1,7 +1,5 @@
 -- PostgreSQL Initialization Script
-
--- Create replication user
-CREATE USER replicator WITH REPLICATION ENCRYPTED PASSWORD 'REPLICATION_PASSWORD';
+-- Replication role is managed by 00-create-replication-user.sh
 
 -- Create additional schemas if needed
 CREATE SCHEMA IF NOT EXISTS app;

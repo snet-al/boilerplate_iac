@@ -11,25 +11,6 @@ K8S=false
 K8S_NAMESPACE="default"
 SITE="primary"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-show_help() {
-    cat << EOF
-Usage: ./monitor.sh [options]
-
-Options:
-  -k, --k8s         Monitor Kubernetes (default: Docker Compose)
-  -n, --namespace   Kubernetes namespace - default: default
-  -s, --site        Docker Compose site (primary|secondary) - default: primary
-  -w, --wait        Wait for healthy status (with retries)
-  -h, --help        Show this help message
-
-Examples:
-  ./monitor.sh                     # Check Docker Compose status
-  ./monitor.sh -k -n production    # Check Kubernetes pods
-  ./monitor.sh -w                  # Wait until healthy
-EOF
-}
-
 WAIT_MODE=false
 
 check_docker() {

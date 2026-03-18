@@ -154,24 +154,28 @@ services:
     image: postgres:16-alpine
     container_name: ${COMPOSE_PROJECT_NAME:-secondary}_postgres
     restart: always
+    entrypoint:
+      - /bin/sh
+      - /usr/local/bin/postgres-secondary-entrypoint.sh
     env_file:
       - ${ENV_DIR:-.}/.env.postgres
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-app_db}
-      POSTGRES_USER: ${POSTGRES_USER:-app_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       PGDATA: /var/lib/postgresql/data
-    command: >
-      postgres
-      -c hot_standby=on
-      -c shared_buffers=512MB
-      -c effective_cache_size=1536MB
-      -c work_mem=16MB
-      -c max_connections=300
+    command:
+      - postgres
+      - -c
+      - hot_standby=on
+      - -c
+      - shared_buffers=512MB
+      - -c
+      - effective_cache_size=1536MB
+      - -c
+      - work_mem=16MB
+      - -c
+      - max_connections=300
     volumes:
       - postgres_secondary_data:/var/lib/postgresql/data
-      - ./docker/postgres/secondary/recovery.conf:/var/lib/postgresql/data/recovery.conf:ro
-      - ./docker/postgres/secondary/standby.signal:/var/lib/postgresql/data/standby.signal:ro
+      - ./docker/postgres/secondary/entrypoint.sh:/usr/local/bin/postgres-secondary-entrypoint.sh:ro
     networks:
       - backend_network
       - replication_network
@@ -186,7 +190,7 @@ services:
           cpus: '0.5'
           memory: 512M
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-app_user}']
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" && psql -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -tAc "SELECT pg_is_in_recovery()" | grep -q t']
       interval: 30s
       timeout: 10s
       retries: 5

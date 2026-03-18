@@ -14,21 +14,6 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_DIR="$PROJECT_ROOT/env"
 DEPLOY_DIR="$PROJECT_ROOT/.deploy"
 
-show_help() {
-    cat << EOF
-Usage: ./k.sh [options]
-
-Options:
-  -c, --client      Client name (folder inside env/) - REQUIRED
-  -s, --site        Site (primary|secondary) - default: primary
-  -n, --namespace   Kubernetes namespace - default: default
-  -h, --help        Show this help message
-
-Examples:
-  ./k.sh -c acme-corp                      # Deploy to default namespace
-  ./k.sh -c acme-corp -n production        # Deploy to production namespace
-EOF
-}
 
 copy_env_file() {
     local app=$1

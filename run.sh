@@ -13,27 +13,12 @@ set -e
 
 APPS=""
 BUILD=""
+APP_ARRAY=()
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="docker-compose.dev.yaml"
 [[ ! -f "$PROJECT_ROOT/$COMPOSE_FILE" ]] && echo "Error: Compose file not found: $COMPOSE_FILE" && exit 1
 COMPOSE_CMD="docker-compose -f $PROJECT_ROOT/$COMPOSE_FILE"
 AVAILABLE_APPS=("mongo" "redis" "mysql" "postgres" "laravel" "nestjs" "react" "next" "nginx")
-
-show_help() {
-    cat << EOF
-Usage: ./run.sh [options]
-
-Options:
-  -a, --apps        Comma-separated list of apps to run
-                    Available: ${AVAILABLE_APPS[*]}
-  -h, --help        Show this help message
-
-Examples:
-  ./run.sh                                    # Run all apps
-  ./run.sh -a laravel,mysql,redis             # Run specific apps
-  ./run.sh -a nestjs,postgres -b              # Run with forced rebuild
-EOF
-}
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -46,19 +31,10 @@ done
 
 if [[ -n "$APPS" ]]; then
     IFS=',' read -ra APP_ARRAY <<< "$APPS"
-    echo "Apps: ${APP_ARRAY[*]}"
-    
-    for app in "${APP_ARRAY[@]}"; do
-        [[ ! " ${AVAILABLE_APPS[*]} " =~ " ${app} " ]] && echo "Warning: App '$app' may not be defined"
-    done
-    
-    COMPOSE_CMD="$COMPOSE_CMD up $BUILD ${APP_ARRAY[*]}"
-else
-    echo "Starting all apps"
-    COMPOSE_CMD="$COMPOSE_CMD up $BUILD"
 fi
 
-echo "Executing: $COMPOSE_CMD"
+COMPOSE_CMD="$COMPOSE_CMD up $BUILD ${APP_ARRAY[*]}"
+
 eval $COMPOSE_CMD
 
 echo "Done!"

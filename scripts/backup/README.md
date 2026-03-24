@@ -4,16 +4,20 @@ All backup operations are managed through the central orchestrator `backup.sh`.
 
 ## Setup
 
-First, create your backup configuration:
+**Interactive wizard** (writes `backup.env` or `backup.prod.env` with safe quoting; can run dry-run / full backup from the script; cron: manual instructions or enter minute/hour and optional `crontab` append):
 
 ```bash
-# Copy example config
+bash scripts/backup/setup-backup-env.sh        # prompts for dev vs prod
+bash scripts/backup/setup-backup-env.sh prod
+bash scripts/backup/setup-backup-env.sh dev
+```
+
+Or create configuration manually:
+
+```bash
 cp env/backup.env.example backup.env
 cp env/backup.prod.env.example backup.prod.env
-
-# Edit the config to set which database to backup
-# Set BACKUP_DATABASE to: postgres, mysql, or mongo
-# Configure connection details: CONTAINER, DB_USER, DB_PASSWORD, DB_NAME
+# Edit: BACKUP_DATABASE (postgres|mysql|mongo), CONNECTION_TYPE, credentials, etc.
 ```
 
 ## Quick Start

@@ -6,9 +6,10 @@
 # Configuration is loaded from backup.env or backup.prod.env
 #
 # Setup:
+#   bash scripts/backup/setup-backup-env.sh   # interactive wizard (dev|prod)
+#   # or manually:
 #   cp env/backup.env.example backup.env
 #   cp env/backup.prod.env.example backup.prod.env
-#   # Edit the .env files to configure which database to backup
 #
 # Usage: ./backup.sh <command> [options]
 #

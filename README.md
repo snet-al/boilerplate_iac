@@ -8,6 +8,7 @@ A comprehensive, production-ready Infrastructure as Code (IaC) boilerplate suppo
 - [Project Structure](#-project-structure)
 - [Quick Start](#-quick-start)
 - [Services](#-services)
+- [SMTP Relay](#️-smtp-relay)
 - [Deployment](#-deployment)
 - [Client Management](#-client-management)
 - [Kubernetes](#-kubernetes)
@@ -90,7 +91,8 @@ boilerplate_iac/
 │       ├── .env.db.mongo
 │       ├── .env.db.mysql
 │       ├── .env.db.postgres
-│       └── .env.db.redis
+│       ├── .env.db.redis
+│       └── .env.infra.smtp
 │
 ├── 📁 config/                   # Service configurations
 │   └── nginx/
@@ -107,7 +109,10 @@ boilerplate_iac/
 │   ├── next/
 │   ├── mongo/
 │   ├── mysql/
-│   └── postgres/
+│   ├── postgres/
+│   └── smtp/                    # Send-only Postfix + OpenDKIM relay
+│       ├── Dockerfile
+│       └── entrypoint.sh
 │
 └── 📁 k8s/                      # Kubernetes manifests
     ├── namespaces/
@@ -189,9 +194,10 @@ cd boilerplate_iac
 
 ### Infrastructure
 
-| Service | Dev Port | Description      |
-| ------- | -------- | ---------------- |
-| Nginx   | 80/443   | Reverse proxy/LB |
+| Service | Dev Port | Description                          |
+| ------- | -------- | ------------------------------------ |
+| Nginx   | 80/443   | Reverse proxy/LB                     |
+| SMTP    | 2525→25  | Send-only mail relay (Postfix+DKIM)  |
 
 ### Dev Tools (Development Only)
 
@@ -201,6 +207,47 @@ cd boilerplate_iac
 | Adminer         | 8080 | Database admin |
 | Mongo Express   | 8081 | MongoDB admin  |
 | Redis Commander | 8082 | Redis admin    |
+
+## ✉️ SMTP Relay
+
+`docker/smtp/` is a self-contained, send-only mail relay: Postfix + OpenDKIM on Alpine,
+fully configured from env vars. Apps talk to it as `smtp:25` on `backend_network` — no
+auth, access is restricted by `SMTP_ALLOWED_NETWORKS`. Every message is DKIM-signed and
+must come from an address `@SMTP_DOMAIN` (or `SMTP_ALLOWED_SENDER_DOMAINS`); anything
+else is rejected at `MAIL FROM`. It is portable: copy `docker/smtp/`, the compose block
+and `env/client/.env.infra.smtp` into any `pr_*` repo and set `SMTP_DOMAIN`.
+
+**Configure** `env/<client>/.env.infra.smtp` (template in `env/client/`):
+
+| Variable                      | Default                          | Purpose                                   |
+| ----------------------------- | -------------------------------- | ----------------------------------------- |
+| `SMTP_DOMAIN`                 | required                         | Sender domain — mail goes out as `@domain` |
+| `SMTP_HOSTNAME`               | `mail.$SMTP_DOMAIN`              | HELO name; must have A + PTR for direct delivery |
+| `SMTP_ALLOWED_SENDER_DOMAINS` | `$SMTP_DOMAIN`                   | Space-separated envelope-sender allowlist |
+| `SMTP_ALLOWED_NETWORKS`       | Docker private ranges            | Who may submit (Postfix `mynetworks`)     |
+| `SMTP_DKIM_SELECTOR`          | `mail`                           | DKIM selector; key auto-generated on first boot |
+| `SMTP_RELAY_HOST/PORT/USER/PASSWORD` | empty (direct delivery)   | Optional upstream (SES, Mailgun, Postmark…) |
+| `SMTP_RELAY_TLS`              | `true`                           | Require TLS to the relay                  |
+
+Use `SMTP_RELAY_HOST` whenever the host cannot open outbound port 25 (most VPS providers
+block it) or has no static IP with a PTR record. DKIM is still applied before the relay.
+
+**Publish DNS.** The DKIM key lives in the `smtp_dkim` volume and is generated on first
+start. Print the records and add them at your DNS provider:
+
+```bash
+docker exec <client>-primary_smtp entrypoint.sh dns      # SPF, DKIM, DMARC, A/PTR
+docker exec <client>-primary_smtp entrypoint.sh test you@example.org
+docker exec <client>-primary_smtp mailq                  # queue / bounces
+```
+
+Primary and secondary sites must sign with the same key: copy the `smtp_dkim` volume to
+the secondary (or `docker cp` the `keys/<domain>/` directory) before its first start.
+
+**Apps** point at the relay with the vars already in the client templates: Laravel
+`MAIL_HOST=smtp MAIL_PORT=25 MAIL_ENCRYPTION=null`, NestJS `SMTP_HOST=smtp SMTP_PORT=25`.
+In dev, `mailhog` remains the default for app templates; the relay is also started and
+reachable from the host on `localhost:2525` for integration checks.
 
 ## 📦 Deployment
 
@@ -426,7 +473,7 @@ docker/postgres/primary/
 Usage: ./run.sh [options]
 
 Options:
-  -s, --services    Comma-separated services (mongo,redis,mysql,postgres,laravel,nestjs,react,next)
+  -s, --services    Comma-separated services (mongo,redis,mysql,postgres,laravel,nestjs,react,next,smtp)
   -e, --env         Environment (dev|prod) - default: dev
   -d, --detach      Run in background
   -b, --build       Force rebuild images
@@ -463,7 +510,7 @@ Usage: ./deploy-secondary.sh [options]
 Options:
   -c, --client      Client name (required)
   -a, --apps        Specific apps to deploy
-                    Default: laravel,nestjs,react,next
+                    Default: laravel,nestjs,react,next,smtp
                     Use db to deploy replica databases only
                     nginx is intentionally excluded
   -h, --help        Show help

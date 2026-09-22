@@ -28,6 +28,7 @@ ENV_FILES=(
     "nestjs:.env.back.nestjs:.env.nestjs"
     "react:.env.front.react:.env.react"
     "next:.env.front.next:.env.next"
+    "smtp:.env.infra.smtp:.env.smtp"
 )
 
 copy_env() {
@@ -58,7 +59,7 @@ expand_requested_app() {
             printf '%s\n' mongo redis mysql postgres
             ;;
         apps)
-            printf '%s\n' laravel nestjs react next
+            printf '%s\n' laravel nestjs react next smtp
             ;;
         *)
             printf '%s\n' "$1"

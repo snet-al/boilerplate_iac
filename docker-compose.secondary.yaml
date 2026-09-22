@@ -451,6 +451,38 @@ services:
           cpus: '0.1'
           memory: 64M
 
+  smtp:
+    build:
+      context: ./docker/smtp
+    container_name: ${COMPOSE_PROJECT_NAME:-secondary}_smtp
+    restart: always
+    env_file:
+      - ${ENV_DIR:-.}/.env.smtp
+    volumes:
+      - smtp_spool:/var/spool/postfix
+      - smtp_dkim:/etc/opendkim/keys
+    networks:
+      - backend_network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    logging:
+      driver: 'json-file'
+      options:
+        max-size: '50m'
+        max-file: '5'
+    healthcheck:
+      test: ['CMD', 'postfix', 'status']
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
 # =============================================================================
 # VOLUMES
 # =============================================================================
@@ -468,6 +500,10 @@ volumes:
   laravel_storage:
     driver: local
   nginx_cache:
+    driver: local
+  smtp_spool:
+    driver: local
+  smtp_dkim:
     driver: local
 
 # =============================================================================

@@ -18,7 +18,7 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="docker-compose.dev.yaml"
 [[ ! -f "$PROJECT_ROOT/$COMPOSE_FILE" ]] && echo "Error: Compose file not found: $COMPOSE_FILE" && exit 1
 COMPOSE_CMD="docker-compose -f $PROJECT_ROOT/$COMPOSE_FILE"
-AVAILABLE_APPS=("mongo" "redis" "mysql" "postgres" "laravel" "nestjs" "react" "next" "nginx")
+AVAILABLE_APPS=("mongo" "redis" "mysql" "postgres" "laravel" "nestjs" "react" "next" "nginx" "smtp")
 
 while [[ $# -gt 0 ]]; do
     case $1 in

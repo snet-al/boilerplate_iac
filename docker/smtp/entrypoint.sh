@@ -77,6 +77,8 @@ render_postfix() {
         "mydomain=${SMTP_DOMAIN}" \
         "myorigin=${SMTP_DOMAIN}" \
         "mydestination=" \
+        "alias_maps=" \
+        "alias_database=" \
         "inet_interfaces=all" \
         "inet_protocols=ipv4" \
         "mynetworks=${SMTP_ALLOWED_NETWORKS}" \

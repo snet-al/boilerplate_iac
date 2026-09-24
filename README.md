@@ -232,17 +232,74 @@ and `env/client/.env.infra.smtp` into any `pr_*` repo and set `SMTP_DOMAIN`.
 Use `SMTP_RELAY_HOST` whenever the host cannot open outbound port 25 (most VPS providers
 block it) or has no static IP with a PTR record. DKIM is still applied before the relay.
 
-**Publish DNS.** The DKIM key lives in the `smtp_dkim` volume and is generated on first
-start. Print the records and add them at your DNS provider:
+**Getting mail delivered.** With `SMTP_RELAY_HOST` empty the relay hands mail straight to
+the recipient's MX from the host's own IP. Whether Gmail/Outlook accept it depends on the
+records below, which all have to agree on `SMTP_HOSTNAME` (`mail.<domain>`) and the host's
+public IP:
+
+| record | where | value |
+| --- | --- | --- |
+| `A mail.<domain>` | DNS provider, **unproxied** | the host's public IP |
+| PTR for that IP | VPS provider panel (Contabo: Network Services → Reverse DNS; Hetzner: server → Networking) | `mail.<domain>` |
+| SPF `TXT <domain>` | DNS provider | `v=spf1 a:mail.<domain> ~all`, merged into whatever SPF already exists |
+| DKIM `TXT <selector>._domainkey.<domain>` | DNS provider | `v=DKIM1;k=rsa;p=…` as printed by `entrypoint.sh dns` |
+| DMARC `TXT _dmarc.<domain>` | DNS provider | `v=DMARC1; p=none;` while validating, then `p=quarantine; rua=mailto:postmaster@<domain>; adkim=s; aspf=s` |
+
+The A record must not sit behind a CDN proxy (Cloudflare orange cloud): SMTP never passes
+through the proxy and the SPF `a:` mechanism resolves that name. A domain can only have one
+SPF record, so `a:mail.<domain>` is added to the existing one rather than replacing it; if
+inbound mail is handled by a forwarding service (Cloudflare Email Routing, ImprovMX, …) its
+`include:` stays or forwarded mail fails SPF. The DKIM key is generated on first start into
+the `smtp_dkim` volume; a fresh volume means a fresh key and a new TXT value, so the volume
+is part of the backup set. Other `_domainkey` selectors already on the zone (a forwarding
+service, Resend, SES, …) are other senders and coexist with this one.
+
+Bounces and delivery-status notifications are addressed to the envelope sender
+(`noreply@<domain>` or whatever the app uses as `From`), DMARC aggregate reports to
+`SMTP_DMARC_RUA`. Both need a mailbox or forwarding rule behind them; otherwise the domain's
+own MX answers `550` and the bounce is lost.
+
+The relay itself prints and checks the same things:
 
 ```bash
-docker exec <client>-primary_smtp entrypoint.sh dns      # SPF, DKIM, DMARC, A/PTR
+docker exec <client>-primary_smtp entrypoint.sh dns      # SPF, DKIM, DMARC, A/PTR to publish
 docker exec <client>-primary_smtp entrypoint.sh test you@example.org
 docker exec <client>-primary_smtp mailq                  # queue / bounces
+dig +short A mail.<domain>; dig +short -x <ip>            # A and PTR as the world sees them
+dig +short TXT <domain> | grep spf; dig +short TXT <selector>._domainkey.<domain>
 ```
+
+A correct send shows `SPF: PASS`, `DKIM: PASS with domain <domain>` and `DMARC: PASS` in
+Gmail's "Show original"; mail-tester.com scores the rest (PTR, blacklists, headers).
+Sending before A/PTR/SPF are in place is the fastest way to get a fresh IP blacklisted,
+which is why they are published before the first deploy and DKIM right after it.
+
+What recipients see is the app's `From` (`EMAIL_FROM_ADDRESS` / `MAIL_FROM_ADDRESS`);
+`"Name <noreply@<domain>>"` gives it a display name and still passes the sender allowlist.
+`SMTP_SECURE=false` / `MAIL_ENCRYPTION=null` and no published port on the relay are by
+design: app → relay is plain SMTP inside the compose network, relay → world negotiates
+STARTTLS (`smtp_tls_security_level=may`, `encrypt` when an upstream relay is set).
+`SMTP_ALLOWED_NETWORKS` defaults to the RFC 1918 ranges so it covers whatever subnet Docker
+assigns; it can be narrowed to the one in `docker network inspect <backend network>`.
 
 Primary and secondary sites must sign with the same key: copy the `smtp_dkim` volume to
 the secondary (or `docker cp` the `keys/<domain>/` directory) before its first start.
+
+**Porting the relay into an existing `pr_*` repo** (which may not share this scaffold's file
+names — check its compose files, `run.sh` and `deploy*.sh` first):
+
+1. `cp -r boilerplate_iac/docker/smtp <repo>/docker/smtp` — nothing inside it is project-specific.
+2. Env file per stage/client in the repo's own naming (`env/smtp.env.prod`,
+   `env/clients/<client>/smtp.env.prod`, …) from `env/client/.env.infra.smtp` with `SMTP_DOMAIN` set.
+3. Compose block per file: `build.context: ./docker/smtp`, `env_file`, the two volumes
+   (`smtp_spool`, `smtp_dkim`), the repo's backend network, the `postfix status` healthcheck.
+   Register both volumes at the top. Dev may expose `127.0.0.1:2525:25`; prod exposes nothing.
+4. Apps: add `SMTP_HOST=<smtp service> SMTP_PORT=25` (Laravel: `MAIL_HOST/MAIL_PORT`,
+   `MAIL_ENCRYPTION=null`) to the mail-sending services and `depends_on` the relay. If the app
+   hard-codes its transport, make it read those vars.
+5. Scripts: add the service to `run.sh`'s core list and the env copy to the deploy script
+   (`ENV_FILES` here; whatever `cp` block the repo uses otherwise).
+6. Start it, run `entrypoint.sh dns`, publish the records, `entrypoint.sh test <you>`.
 
 **Apps** point at the relay with the vars already in the client templates: Laravel
 `MAIL_HOST=smtp MAIL_PORT=25 MAIL_ENCRYPTION=null`, NestJS `SMTP_HOST=smtp SMTP_PORT=25`.
